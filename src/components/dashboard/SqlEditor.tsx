@@ -21,7 +21,9 @@ import {
   Database, 
   Save, 
   Trash2,
-  X
+  X,
+  Copy,
+  Check
 } from 'lucide-react';
 import { SAMPLE_QUERY_TEMPLATES } from '@/lib/prompts';
 import type { QueryResult, SavedQuery } from '@/types';
@@ -42,6 +44,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
   const [newQueryName, setNewQueryName] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<SavedQuery['category']>('custom');
   const [selectedQueryId, setSelectedQueryId] = useState<string>('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -53,6 +56,24 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
   const saveQueries = (queries: SavedQuery[]) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(queries));
     setSavedQueries(queries);
+  };
+
+  const handleCopyQuery = async () => {
+    try {
+      await navigator.clipboard.writeText(query);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = query;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleSaveQuery = () => {
@@ -157,6 +178,24 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
           <span className="font-semibold text-gray-900 text-sm">SQL 쿼리</span>
         </div>
         <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleCopyQuery}
+            className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
+          >
+            {copied ? (
+              <>
+                <Check className="w-3.5 h-3.5 mr-1 text-green-600" />
+                <span className="text-green-600">복사됨</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5 mr-1" />
+                복사
+              </>
+            )}
+          </Button>
           <Button
             variant="ghost"
             size="sm"

@@ -59,8 +59,9 @@ export const SAMPLE_QUERY_TEMPLATES: Array<{
 
 export const SAMPLE_BRANDS = [
   'MLB',
+  'MLB KIDS',
   'DISCOVERY',
   'STRETCH ANGELS',
   'DUVETICA',
-  'SUECOMMABONNIE',
+  'SERGIO TACCHINI',
 ];
