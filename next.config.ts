@@ -14,9 +14,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  experimental: {
-    serverComponentsExternalPackages: ['snowflake-sdk'],
-  },
+  serverExternalPackages: ['snowflake-sdk'],
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.externals = config.externals || [];
