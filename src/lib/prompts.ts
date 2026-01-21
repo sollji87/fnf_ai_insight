@@ -61,7 +61,7 @@ export const SAMPLE_BRANDS = [
   'MLB',
   'MLB KIDS',
   'DISCOVERY',
-  'STRETCH ANGELS',
   'DUVETICA',
   'SERGIO TACCHINI',
+  'SUPRA',
 ];
