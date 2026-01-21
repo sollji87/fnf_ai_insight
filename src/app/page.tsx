@@ -126,7 +126,7 @@ export default function HomePage() {
               {activeTab === 'data' ? (
                 <DataPreview queryResult={queryResult} />
               ) : (
-                <InsightViewer insightResponse={insightResponse} />
+                <InsightViewer insightResponse={insightResponse} currentQuery={currentQuery} />
               )}
             </div>
           </div>

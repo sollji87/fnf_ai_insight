@@ -4,15 +4,23 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
-import { FileText, Copy, Download, Check, Clock, Coins, Cpu } from 'lucide-react';
+import { FileText, Copy, Download, Check, Clock, Coins, Cpu, Save, X } from 'lucide-react';
 import type { InsightResponse } from '@/types';
 
 interface InsightViewerProps {
   insightResponse: InsightResponse | null;
+  currentQuery?: string;
+  brandName?: string;
 }
 
-export function InsightViewer({ insightResponse }: InsightViewerProps) {
+export function InsightViewer({ insightResponse, currentQuery, brandName }: InsightViewerProps) {
   const [copied, setCopied] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveTitle, setSaveTitle] = useState('');
+  const [saveBrandName, setSaveBrandName] = useState(brandName || '');
+  const [createdBy, setCreatedBy] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const copyToClipboard = async () => {
     if (!insightResponse?.insight) return;
@@ -34,6 +42,48 @@ export function InsightViewer({ insightResponse }: InsightViewerProps) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleSave = async () => {
+    if (!insightResponse?.insight || !saveTitle.trim()) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch('/api/saved-insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: saveTitle.trim(),
+          brandName: saveBrandName.trim() || undefined,
+          insight: insightResponse.insight,
+          query: currentQuery,
+          tokensUsed: insightResponse.tokensUsed,
+          model: insightResponse.model,
+          createdBy: createdBy.trim() || '익명',
+        }),
+      });
+
+      if (response.ok) {
+        setSaveSuccess(true);
+        setTimeout(() => {
+          setShowSaveDialog(false);
+          setSaveSuccess(false);
+          setSaveTitle('');
+          setSaveBrandName('');
+          setCreatedBy('');
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('Save error:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openSaveDialog = () => {
+    setSaveBrandName(brandName || '');
+    setSaveTitle(brandName ? `${brandName} 분석 인사이트` : '');
+    setShowSaveDialog(true);
   };
 
   if (!insightResponse) {
@@ -61,6 +111,15 @@ export function InsightViewer({ insightResponse }: InsightViewerProps) {
           <span className="font-semibold text-gray-900 text-sm">AI 인사이트</span>
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={openSaveDialog}
+            className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
+          >
+            <Save className="w-3.5 h-3.5 mr-1" />
+            저장
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -129,6 +188,92 @@ export function InsightViewer({ insightResponse }: InsightViewerProps) {
           </ReactMarkdown>
         </article>
       </div>
+
+      {/* Save Dialog */}
+      {showSaveDialog && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl border border-gray-200 p-5 w-96 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-gray-900">인사이트 저장</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSaveDialog(false)}
+                className="h-7 w-7 p-0 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            {saveSuccess ? (
+              <div className="text-center py-6">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <Check className="w-6 h-6 text-emerald-600" />
+                </div>
+                <p className="text-gray-900 font-medium">저장 완료!</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      제목 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={saveTitle}
+                      onChange={(e) => setSaveTitle(e.target.value)}
+                      placeholder="예: MLB 1월 매출 분석"
+                      className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      브랜드명 (선택)
+                    </label>
+                    <input
+                      type="text"
+                      value={saveBrandName}
+                      onChange={(e) => setSaveBrandName(e.target.value)}
+                      placeholder="예: MLB"
+                      className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      작성자 (선택)
+                    </label>
+                    <input
+                      type="text"
+                      value={createdBy}
+                      onChange={(e) => setCreatedBy(e.target.value)}
+                      placeholder="예: 홍길동"
+                      className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mt-5">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowSaveDialog(false)}
+                    className="flex-1 border-gray-200 text-gray-700 hover:bg-gray-50"
+                  >
+                    취소
+                  </Button>
+                  <Button
+                    onClick={handleSave}
+                    disabled={!saveTitle.trim() || isSaving}
+                    className="flex-1 bg-gray-900 hover:bg-gray-800 text-white"
+                  >
+                    {isSaving ? '저장 중...' : '저장'}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

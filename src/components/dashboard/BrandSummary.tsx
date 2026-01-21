@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
@@ -18,15 +18,18 @@ import {
   Check,
   X,
   Sparkles,
+  RefreshCw,
+  BookOpen,
 } from 'lucide-react';
 import { SAMPLE_BRANDS, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE } from '@/lib/prompts';
-import type { BrandInsight, InsightResponse } from '@/types';
+import type { BrandInsight, InsightResponse, SavedInsight } from '@/types';
 
 interface BrandSummaryProps {
   onClose: () => void;
 }
 
 export function BrandSummary({ onClose }: BrandSummaryProps) {
+  const [mode, setMode] = useState<'new' | 'saved'>('saved');
   const [brands, setBrands] = useState<string[]>(SAMPLE_BRANDS);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [newBrand, setNewBrand] = useState('');
@@ -43,6 +46,95 @@ FROM sales_table
 WHERE sale_date >= DATEADD(month, -1, CURRENT_DATE())
 GROUP BY brand_name
 ORDER BY total_sales DESC;`);
+
+  // 저장된 인사이트 관련 상태
+  const [savedInsights, setSavedInsights] = useState<SavedInsight[]>([]);
+  const [selectedInsights, setSelectedInsights] = useState<string[]>([]);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
+
+  // 저장된 인사이트 불러오기
+  const fetchSavedInsights = async () => {
+    setIsLoadingInsights(true);
+    try {
+      const response = await fetch('/api/saved-insights');
+      const data = await response.json();
+      if (data.success) {
+        setSavedInsights(data.insights || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch saved insights:', error);
+    } finally {
+      setIsLoadingInsights(false);
+    }
+  };
+
+  // 저장된 인사이트 삭제
+  const deleteInsight = async (id: string) => {
+    try {
+      await fetch('/api/saved-insights', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      setSavedInsights((prev) => prev.filter((i) => i.id !== id));
+      setSelectedInsights((prev) => prev.filter((sid) => sid !== id));
+    } catch (error) {
+      console.error('Failed to delete insight:', error);
+    }
+  };
+
+  // 인사이트 선택 토글
+  const toggleInsightSelection = (id: string) => {
+    setSelectedInsights((prev) =>
+      prev.includes(id) ? prev.filter((sid) => sid !== id) : [...prev, id]
+    );
+  };
+
+  // 저장된 인사이트로 종합 요약 생성
+  const generateSummaryFromSaved = async () => {
+    if (selectedInsights.length === 0) return;
+
+    setIsGenerating(true);
+    setCurrentStep('저장된 인사이트 종합 중...');
+    setSummary(null);
+
+    const selectedData = savedInsights
+      .filter((i) => selectedInsights.includes(i.id))
+      .map((i) => ({
+        brandName: i.brandName || i.title,
+        insight: i.insight,
+      }));
+
+    try {
+      const summaryResponse = await fetch('/api/insight', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brandInsights: selectedData,
+        }),
+      });
+
+      const summaryData = await summaryResponse.json();
+
+      if (summaryResponse.ok) {
+        setSummary({
+          insight: summaryData.summary,
+          tokensUsed: summaryData.tokensUsed,
+          responseTime: summaryData.responseTime,
+          model: summaryData.model,
+        });
+      }
+    } catch (error) {
+      console.error('요약 생성 실패:', error);
+    }
+
+    setCurrentStep(null);
+    setIsGenerating(false);
+  };
+
+  useEffect(() => {
+    fetchSavedInsights();
+  }, []);
 
   const toggleBrand = (brand: string) => {
     setSelectedBrands((prev) =>
@@ -190,7 +282,12 @@ ORDER BY total_sales DESC;`);
             </div>
             <div>
               <h2 className="text-base font-bold text-gray-900">브랜드별 요약 분석</h2>
-              <p className="text-xs text-gray-500">여러 브랜드를 한 번에 분석하고 종합 인사이트를 생성합니다</p>
+              <p className="text-xs text-gray-500">
+                {mode === 'saved' 
+                  ? '저장된 인사이트를 선택하여 종합 보고서를 생성합니다'
+                  : '여러 브랜드를 한 번에 분석하고 종합 인사이트를 생성합니다'
+                }
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
@@ -233,8 +330,119 @@ ORDER BY total_sales DESC;`);
 
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar */}
-          <div className="w-64 border-r border-gray-100 p-4 flex flex-col bg-gray-50/30">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">브랜드 선택</h3>
+          <div className="w-72 border-r border-gray-100 p-4 flex flex-col bg-gray-50/30">
+            {/* Mode Toggle */}
+            <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-lg">
+              <button
+                onClick={() => setMode('saved')}
+                className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
+                  mode === 'saved'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                저장된 인사이트
+              </button>
+              <button
+                onClick={() => setMode('new')}
+                className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
+                  mode === 'new'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                새로 분석
+              </button>
+            </div>
+
+            {mode === 'saved' ? (
+              <>
+                {/* 저장된 인사이트 모드 */}
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900">저장된 인사이트</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={fetchSavedInsights}
+                    className="h-7 w-7 p-0 text-gray-400 hover:text-gray-600"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingInsights ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
+
+                <div className="space-y-1.5 mb-4 flex-1 overflow-y-auto">
+                  {isLoadingInsights ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                    </div>
+                  ) : savedInsights.length === 0 ? (
+                    <div className="text-center py-8">
+                      <FileText className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                      <p className="text-xs text-gray-500">저장된 인사이트가 없습니다</p>
+                      <p className="text-xs text-gray-400 mt-1">AI 인사이트 생성 후 저장해주세요</p>
+                    </div>
+                  ) : (
+                    savedInsights.map((insight) => (
+                      <div
+                        key={insight.id}
+                        className="flex items-start gap-2 p-2.5 rounded-lg hover:bg-gray-100 transition-colors group"
+                      >
+                        <Checkbox
+                          id={insight.id}
+                          checked={selectedInsights.includes(insight.id)}
+                          onCheckedChange={() => toggleInsightSelection(insight.id)}
+                          className="mt-0.5 border-gray-300 data-[state=checked]:bg-gray-900 data-[state=checked]:border-gray-900"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <Label htmlFor={insight.id} className="text-xs font-medium text-gray-800 cursor-pointer block truncate">
+                            {insight.title}
+                          </Label>
+                          {insight.brandName && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded mt-1 inline-block">
+                              {insight.brandName}
+                            </span>
+                          )}
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            {new Date(insight.createdAt).toLocaleDateString('ko-KR')} · {insight.createdBy}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteInsight(insight.id)}
+                          className="h-6 w-6 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <Button
+                  onClick={generateSummaryFromSaved}
+                  disabled={isGenerating || selectedInsights.length === 0}
+                  className="w-full bg-gray-900 hover:bg-gray-800 text-white"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {currentStep || '요약 생성 중...'}
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      {selectedInsights.length}개 인사이트 요약
+                    </>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <>
+                {/* 새로 분석 모드 */}
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">브랜드 선택</h3>
 
             <div className="space-y-1.5 mb-4 flex-1 overflow-y-auto">
               {brands.map((brand) => (
@@ -310,11 +518,23 @@ ORDER BY total_sales DESC;`);
                 </>
               )}
             </Button>
+              </>
+            )}
           </div>
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-5">
-            {brandInsights.length === 0 && !summary ? (
+            {mode === 'saved' && !summary ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <div className="w-14 h-14 mx-auto mb-3 rounded-xl bg-gray-100 flex items-center justify-center">
+                    <BookOpen className="w-6 h-6 text-gray-400" />
+                  </div>
+                  <p className="text-gray-600 font-medium text-sm">저장된 인사이트를 선택하세요</p>
+                  <p className="text-gray-400 text-xs mt-1">선택한 인사이트들을 종합한 요약 보고서를 생성합니다</p>
+                </div>
+              </div>
+            ) : mode === 'new' && brandInsights.length === 0 && !summary ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
                   <div className="w-14 h-14 mx-auto mb-3 rounded-xl bg-gray-100 flex items-center justify-center">
@@ -326,7 +546,8 @@ ORDER BY total_sales DESC;`);
               </div>
             ) : (
               <div className="space-y-5">
-                {brandInsights.map((bi) => (
+                {/* 새로 분석 모드의 브랜드별 인사이트 */}
+                {mode === 'new' && brandInsights.map((bi) => (
                   <div
                     key={bi.brandName}
                     className="rounded-xl bg-white border border-gray-200 p-5 card-shadow"
@@ -348,11 +569,35 @@ ORDER BY total_sales DESC;`);
                   </div>
                 ))}
 
+                {/* 저장된 인사이트 모드 - 선택된 인사이트 미리보기 */}
+                {mode === 'saved' && selectedInsights.length > 0 && !summary && (
+                  <div className="rounded-xl bg-white border border-gray-200 p-5 card-shadow">
+                    <h3 className="text-base font-bold text-gray-900 mb-3 pb-2 border-b border-gray-100">
+                      선택된 인사이트 ({selectedInsights.length}개)
+                    </h3>
+                    <div className="space-y-2">
+                      {savedInsights
+                        .filter((i) => selectedInsights.includes(i.id))
+                        .map((insight) => (
+                          <div key={insight.id} className="flex items-center gap-2 text-sm text-gray-600">
+                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
+                            <span>{insight.title}</span>
+                            {insight.brandName && (
+                              <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">
+                                {insight.brandName}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
                 {summary && (
                   <div className="rounded-xl bg-gray-50 border border-gray-200 p-5">
                     <h3 className="text-lg font-bold text-gray-900 mb-3 pb-2 border-b border-gray-200 flex items-center gap-2">
                       <Sparkles className="w-4 h-4" />
-                      전체 브랜드 종합 요약
+                      {mode === 'saved' ? '저장된 인사이트 종합 요약' : '전체 브랜드 종합 요약'}
                     </h3>
                     <article className="prose prose-sm max-w-none
                       prose-headings:text-gray-900

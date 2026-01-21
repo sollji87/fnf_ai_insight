@@ -58,3 +58,15 @@ export interface SavedQuery {
   createdAt: string;
   createdBy?: string;
 }
+
+export interface SavedInsight {
+  id: string;
+  title: string;
+  brandName?: string;
+  insight: string;
+  query?: string;
+  tokensUsed: number;
+  model: string;
+  createdAt: string;
+  createdBy?: string;
+}
