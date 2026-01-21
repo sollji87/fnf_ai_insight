@@ -19,7 +19,7 @@ import {
   X,
   Sparkles,
 } from 'lucide-react';
-import { SAMPLE_BRANDS, SAMPLE_QUERY_TEMPLATES, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE } from '@/lib/prompts';
+import { SAMPLE_BRANDS, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE } from '@/lib/prompts';
 import type { BrandInsight, InsightResponse } from '@/types';
 
 interface BrandSummaryProps {
@@ -35,7 +35,14 @@ export function BrandSummary({ onClose }: BrandSummaryProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentStep, setCurrentStep] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [queryTemplate, setQueryTemplate] = useState(SAMPLE_QUERY_TEMPLATES[0].query);
+  const [queryTemplate, setQueryTemplate] = useState(`-- 브랜드별 분석 쿼리
+SELECT 
+    brand_name,
+    SUM(act_sale_amt) as total_sales
+FROM sales_table
+WHERE sale_date >= DATEADD(month, -1, CURRENT_DATE())
+GROUP BY brand_name
+ORDER BY total_sales DESC;`);
 
   const toggleBrand = (brand: string) => {
     setSelectedBrands((prev) =>
