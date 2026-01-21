@@ -14,6 +14,7 @@ interface PromptEditorProps {
   onInsightGenerated: (response: InsightResponse) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
+  onGenerateReady?: (generateFn: () => Promise<void>) => void;
 }
 
 const COMMON_PROMPT_KEY = 'fnf-common-prompt';
@@ -34,6 +35,7 @@ export function PromptEditor({
   onInsightGenerated,
   isLoading,
   setIsLoading,
+  onGenerateReady,
 }: PromptEditorProps) {
   const [systemPrompt, setSystemPrompt] = useState(SYSTEM_PROMPT);
   const [userPrompt, setUserPrompt] = useState('');
@@ -50,6 +52,13 @@ export function PromptEditor({
       setCommonPrompt(stored);
     }
   }, []);
+
+  // Expose generateInsight function to parent
+  useEffect(() => {
+    if (onGenerateReady) {
+      onGenerateReady(generateInsight);
+    }
+  }, [onGenerateReady, queryResult, systemPrompt, userPrompt, commonPrompt, analysisRequest]);
 
   const openCommonPromptEditor = () => {
     setTempCommonPrompt(commonPrompt);
@@ -250,27 +259,6 @@ ${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n
           {error}
         </div>
       )}
-
-      {/* Footer */}
-      <div className="p-3 border-t border-gray-100 bg-gray-50/50">
-        <Button
-          onClick={generateInsight}
-          disabled={isLoading || !queryResult}
-          className="w-full bg-gray-900 hover:bg-gray-800 text-white h-9 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              AI 분석 중...
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4 mr-2" />
-              AI 인사이트 생성
-            </>
-          )}
-        </Button>
-      </div>
 
       {/* Common Prompt Editor Modal */}
       {showCommonPromptEditor && (

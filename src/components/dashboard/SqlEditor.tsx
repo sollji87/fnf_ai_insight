@@ -59,7 +59,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
+  
   // Table selection states
   const [availableTables, setAvailableTables] = useState<string[]>([]);
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
@@ -82,7 +82,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
   const fetchTableList = async () => {
     setIsLoadingTables(true);
     try {
-      const response = await fetch('/api/tables');
+      const response = await fetch('/api/snowflake/tables');
       const data = await response.json();
       if (data.success) {
         setAvailableTables(data.tables || []);
@@ -213,6 +213,11 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
     }
   };
 
+  const handleOpenAiHelper = () => {
+    setShowAiHelper(true);
+    fetchTableList();
+  };
+
   // AI Helper functions
   const resizeImage = (file: File, maxWidth: number = 800, maxHeight: number = 800): Promise<string> => {
     return new Promise((resolve) => {
@@ -274,13 +279,20 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
     setIsAiLoading(true);
     setAiError(null);
 
+    // 선택된 테이블 정보를 요청에 추가
+    let enhancedRequest = aiRequest;
+    if (selectedTables.length > 0) {
+      const tableInfo = `사용할 테이블: ${selectedTables.join(', ')}`;
+      enhancedRequest = aiRequest ? `${tableInfo}\n\n${aiRequest}` : tableInfo;
+    }
+
     try {
       const response = await fetch('/api/query-helper', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           currentQuery: query,
-          userRequest: aiRequest,
+          userRequest: enhancedRequest,
           tableImage: aiImage,
           tables: selectedTables,
         }),
@@ -344,7 +356,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setShowAiHelper(true)}
+            onClick={handleOpenAiHelper}
             className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 h-8 text-xs"
           >
             <Sparkles className="w-3.5 h-3.5 mr-1" />
@@ -562,8 +574,8 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
       {/* AI Query Helper Dialog */}
       {showAiHelper && (
         <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-50">
-          <div className="bg-white border border-gray-200 rounded-xl p-5 w-[480px] shadow-xl">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white border border-gray-200 rounded-xl p-5 w-[480px] max-h-[90vh] shadow-xl flex flex-col">
+            <div className="flex items-center justify-between mb-4 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
                   <Sparkles className="w-4 h-4 text-purple-600" />
@@ -579,6 +591,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
                 onClick={() => {
                   setShowAiHelper(false);
                   setAiError(null);
+                  setSelectedTables([]);
                 }}
                 className="text-gray-400 hover:text-gray-600 h-8 w-8 p-0"
               >
@@ -586,7 +599,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
               </Button>
             </div>
 
-            <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto space-y-4">
               {/* Table Selection */}
               <div>
                 <label className="text-sm text-gray-600 mb-1.5 block flex items-center gap-1.5">
@@ -599,7 +612,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
                     <span className="text-sm text-gray-500">테이블 목록 로딩 중...</span>
                   </div>
                 ) : availableTables.length > 0 ? (
-                  <div className="border border-gray-200 rounded-lg bg-white max-h-48 overflow-y-auto">
+                  <div className="border border-gray-200 rounded-lg bg-white max-h-[150px] overflow-y-auto">
                     <div className="p-2 space-y-1">
                       {availableTables.map((table) => (
                         <label
@@ -729,11 +742,13 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
                   {aiError}
                 </div>
               )}
+            </div>
 
-              {/* Actions */}
+            {/* Actions - Fixed at bottom */}
+            <div className="flex-shrink-0 pt-4 mt-4 border-t border-gray-100">
               <Button
                 onClick={handleAiGenerate}
-                disabled={isAiLoading || (!aiRequest.trim() && !aiImage)}
+                disabled={isAiLoading || (!aiRequest.trim() && !aiImage && selectedTables.length === 0)}
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white"
               >
                 {isAiLoading ? (
