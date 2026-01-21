@@ -1,7 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 
 const QUERIES_KEY = 'fnf-shared-queries';
+
+// Upstash Redis 연결 (여러 환경 변수 형식 지원)
+const getRedis = () => {
+  // Vercel KV 형식
+  const kvUrl = process.env.KV_REST_API_URL;
+  const kvToken = process.env.KV_REST_API_TOKEN;
+  
+  // Upstash 형식
+  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  
+  const url = kvUrl || upstashUrl;
+  const token = kvToken || upstashToken;
+  
+  if (!url || !token) {
+    console.log('Redis 환경 변수 확인:', {
+      KV_REST_API_URL: !!kvUrl,
+      KV_REST_API_TOKEN: !!kvToken,
+      UPSTASH_REDIS_REST_URL: !!upstashUrl,
+      UPSTASH_REDIS_REST_TOKEN: !!upstashToken,
+    });
+    return null;
+  }
+  
+  return new Redis({ url, token });
+};
 
 interface SavedQuery {
   id: string;
@@ -15,14 +41,23 @@ interface SavedQuery {
 // 모든 저장된 쿼리 조회
 export async function GET() {
   try {
-    const queries = await kv.get<SavedQuery[]>(QUERIES_KEY);
+    const redis = getRedis();
+    if (!redis) {
+      return NextResponse.json({
+        success: true,
+        queries: [],
+        fallback: true,
+        message: 'Redis가 설정되지 않았습니다.',
+      });
+    }
+    
+    const queries = await redis.get<SavedQuery[]>(QUERIES_KEY);
     return NextResponse.json({
       success: true,
       queries: queries || [],
     });
   } catch (error) {
-    // KV가 설정되지 않은 경우 빈 배열 반환
-    console.error('KV Error:', error);
+    console.error('Redis Error:', error);
     return NextResponse.json({
       success: true,
       queries: [],
@@ -34,6 +69,14 @@ export async function GET() {
 // 새 쿼리 저장
 export async function POST(request: NextRequest) {
   try {
+    const redis = getRedis();
+    if (!redis) {
+      return NextResponse.json(
+        { error: 'Redis가 설정되지 않았습니다. Vercel 대시보드에서 환경 변수를 확인해주세요.' },
+        { status: 500 }
+      );
+    }
+
     const { name, query, category, createdBy } = await request.json();
 
     if (!name || !query) {
@@ -53,7 +96,7 @@ export async function POST(request: NextRequest) {
     };
 
     // 기존 쿼리 조회
-    let queries = await kv.get<SavedQuery[]>(QUERIES_KEY) || [];
+    let queries = await redis.get<SavedQuery[]>(QUERIES_KEY) || [];
     
     // 새 쿼리 추가 (최신순)
     queries = [newQuery, ...queries];
@@ -63,16 +106,16 @@ export async function POST(request: NextRequest) {
       queries = queries.slice(0, 100);
     }
 
-    await kv.set(QUERIES_KEY, queries);
+    await redis.set(QUERIES_KEY, queries);
 
     return NextResponse.json({
       success: true,
       query: newQuery,
     });
   } catch (error) {
-    console.error('KV Error:', error);
+    console.error('Redis Error:', error);
     return NextResponse.json(
-      { error: 'Vercel KV가 설정되지 않았습니다. Vercel 대시보드에서 KV 스토리지를 생성해주세요.' },
+      { error: 'Redis 저장 중 오류가 발생했습니다.' },
       { status: 500 }
     );
   }
@@ -81,6 +124,14 @@ export async function POST(request: NextRequest) {
 // 쿼리 삭제
 export async function DELETE(request: NextRequest) {
   try {
+    const redis = getRedis();
+    if (!redis) {
+      return NextResponse.json(
+        { error: 'Redis가 설정되지 않았습니다.' },
+        { status: 500 }
+      );
+    }
+
     const { id } = await request.json();
 
     if (!id) {
@@ -90,18 +141,18 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    let queries = await kv.get<SavedQuery[]>(QUERIES_KEY) || [];
+    let queries = await redis.get<SavedQuery[]>(QUERIES_KEY) || [];
     queries = queries.filter((q) => q.id !== id);
     
-    await kv.set(QUERIES_KEY, queries);
+    await redis.set(QUERIES_KEY, queries);
 
     return NextResponse.json({
       success: true,
     });
   } catch (error) {
-    console.error('KV Error:', error);
+    console.error('Redis Error:', error);
     return NextResponse.json(
-      { error: 'Vercel KV가 설정되지 않았습니다.' },
+      { error: 'Redis 삭제 중 오류가 발생했습니다.' },
       { status: 500 }
     );
   }
