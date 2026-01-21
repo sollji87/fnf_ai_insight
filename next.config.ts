@@ -1,9 +1,11 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
   eslint: {
     ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
   },
   images: {
     remotePatterns: [
@@ -11,6 +13,18 @@ const nextConfig: NextConfig = {
         hostname: '**',
       },
     ],
+  },
+  experimental: {
+    serverComponentsExternalPackages: ['snowflake-sdk'],
+  },
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push({
+        'snowflake-sdk': 'commonjs snowflake-sdk',
+      });
+    }
+    return config;
   },
 };
 

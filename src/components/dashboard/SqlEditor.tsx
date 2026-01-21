@@ -11,14 +11,16 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
+  SelectSeparator,
 } from '@/components/ui/select';
 import { 
   Play, 
   Loader2, 
   Database, 
   Save, 
-  Trash2, 
-  FolderOpen,
+  Trash2,
   Plus,
   X
 } from 'lucide-react';
@@ -38,9 +40,9 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
   const [error, setError] = useState<string | null>(null);
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [showSavedList, setShowSavedList] = useState(false);
   const [newQueryName, setNewQueryName] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<SavedQuery['category']>('custom');
+  const [selectedQueryId, setSelectedQueryId] = useState<string>('');
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -58,7 +60,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
     if (!newQueryName.trim()) return;
 
     const newQuery: SavedQuery = {
-      id: Date.now().toString(),
+      id: `saved-${Date.now()}`,
       name: newQueryName.trim(),
       query: query,
       category: selectedCategory,
@@ -68,21 +70,32 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
     saveQueries([newQuery, ...savedQueries]);
     setNewQueryName('');
     setShowSaveDialog(false);
+    setSelectedQueryId(newQuery.id);
   };
 
-  const handleDeleteQuery = (id: string) => {
+  const handleDeleteQuery = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
     saveQueries(savedQueries.filter((q) => q.id !== id));
+    if (selectedQueryId === id) {
+      setSelectedQueryId('');
+    }
   };
 
-  const handleLoadQuery = (savedQuery: SavedQuery) => {
-    setQuery(savedQuery.query);
-    setShowSavedList(false);
-  };
-
-  const handleTemplateChange = (templateId: string) => {
-    const template = SAMPLE_QUERY_TEMPLATES.find((t) => t.id === templateId);
+  const handleQuerySelect = (value: string) => {
+    setSelectedQueryId(value);
+    
+    // 샘플 템플릿에서 찾기
+    const template = SAMPLE_QUERY_TEMPLATES.find((t) => t.id === value);
     if (template) {
       setQuery(template.query);
+      return;
+    }
+    
+    // 저장된 쿼리에서 찾기
+    const saved = savedQueries.find((q) => q.id === value);
+    if (saved) {
+      setQuery(saved.query);
     }
   };
 
@@ -111,17 +124,6 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
     }
   };
 
-  const getCategoryColor = (category: SavedQuery['category']) => {
-    const colors = {
-      sales: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      profit: 'bg-amber-50 text-amber-700 border-amber-200',
-      discount: 'bg-violet-50 text-violet-700 border-violet-200',
-      brand: 'bg-rose-50 text-rose-700 border-rose-200',
-      custom: 'bg-gray-100 text-gray-700 border-gray-200',
-    };
-    return colors[category];
-  };
-
   const getCategoryLabel = (category: SavedQuery['category']) => {
     const labels = {
       sales: '매출',
@@ -133,8 +135,20 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
     return labels[category];
   };
 
+  const getSelectedLabel = () => {
+    if (!selectedQueryId) return '쿼리 선택';
+    
+    const template = SAMPLE_QUERY_TEMPLATES.find((t) => t.id === selectedQueryId);
+    if (template) return template.name;
+    
+    const saved = savedQueries.find((q) => q.id === selectedQueryId);
+    if (saved) return saved.name;
+    
+    return '쿼리 선택';
+  };
+
   return (
-    <div className="flex flex-col h-full rounded-xl bg-white border border-gray-200 overflow-hidden card-shadow">
+    <div className="flex flex-col h-full rounded-xl bg-white border border-gray-200 overflow-hidden card-shadow relative">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50">
         <div className="flex items-center gap-2.5">
@@ -147,40 +161,58 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setShowSavedList(true)}
-            className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
-          >
-            <FolderOpen className="w-3.5 h-3.5 mr-1" />
-            저장목록
-            {savedQueries.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-xs">
-                {savedQueries.length}
-              </span>
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
             onClick={() => setShowSaveDialog(true)}
             className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
           >
             <Save className="w-3.5 h-3.5 mr-1" />
             저장
           </Button>
-          <Select onValueChange={handleTemplateChange}>
-            <SelectTrigger className="w-[120px] h-8 bg-white border-gray-200 text-gray-700 text-xs">
-              <SelectValue placeholder="템플릿" />
+          <Select value={selectedQueryId} onValueChange={handleQuerySelect}>
+            <SelectTrigger className="w-[160px] h-8 bg-white border-gray-200 text-gray-700 text-xs">
+              <SelectValue placeholder="쿼리 선택">{getSelectedLabel()}</SelectValue>
             </SelectTrigger>
-            <SelectContent className="bg-white border-gray-200">
-              {SAMPLE_QUERY_TEMPLATES.map((template) => (
-                <SelectItem
-                  key={template.id}
-                  value={template.id}
-                  className="text-gray-700 text-sm"
-                >
-                  {template.name}
-                </SelectItem>
-              ))}
+            <SelectContent className="bg-white border-gray-200 max-h-[400px]">
+              {savedQueries.length > 0 && (
+                <>
+                  <SelectGroup>
+                    <SelectLabel className="text-xs text-gray-500 font-medium">저장된 쿼리</SelectLabel>
+                    {savedQueries.map((saved) => (
+                      <div key={saved.id} className="relative group">
+                        <SelectItem
+                          value={saved.id}
+                          className="text-gray-700 text-sm pr-8"
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px]">
+                              {getCategoryLabel(saved.category)}
+                            </span>
+                            {saved.name}
+                          </span>
+                        </SelectItem>
+                        <button
+                          onClick={(e) => handleDeleteQuery(saved.id, e)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </SelectGroup>
+                  <SelectSeparator />
+                </>
+              )}
+              <SelectGroup>
+                <SelectLabel className="text-xs text-gray-500 font-medium">기본 템플릿</SelectLabel>
+                {SAMPLE_QUERY_TEMPLATES.map((template) => (
+                  <SelectItem
+                    key={template.id}
+                    value={template.id}
+                    className="text-gray-700 text-sm"
+                  >
+                    {template.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
         </div>
@@ -281,73 +313,6 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
                 저장하기
               </Button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Saved Queries List */}
-      {showSavedList && (
-        <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-50">
-          <div className="bg-white border border-gray-200 rounded-xl p-5 w-[480px] max-h-[500px] shadow-xl flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-gray-900">저장된 쿼리</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowSavedList(false)}
-                className="text-gray-400 hover:text-gray-600 h-8 w-8 p-0"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-            
-            {savedQueries.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center py-10 text-gray-400">
-                <FolderOpen className="w-10 h-10 mb-2 opacity-50" />
-                <p className="text-sm">저장된 쿼리가 없습니다</p>
-                <p className="text-xs text-gray-400 mt-1">SQL 쿼리를 작성하고 저장해보세요</p>
-              </div>
-            ) : (
-              <div className="flex-1 overflow-y-auto space-y-2">
-                {savedQueries.map((savedQuery) => (
-                  <div
-                    key={savedQuery.id}
-                    className="group p-3 rounded-lg bg-gray-50 border border-gray-100 hover:bg-gray-100 hover:border-gray-200 transition-all cursor-pointer"
-                    onClick={() => handleLoadQuery(savedQuery)}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-gray-900 text-sm truncate">
-                            {savedQuery.name}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded text-xs border ${getCategoryColor(savedQuery.category)}`}>
-                            {getCategoryLabel(savedQuery.category)}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500 truncate font-mono">
-                          {savedQuery.query.substring(0, 60)}...
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {new Date(savedQuery.createdAt).toLocaleDateString('ko-KR')}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteQuery(savedQuery.id);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 hover:bg-red-50 h-8 w-8 p-0"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       )}
