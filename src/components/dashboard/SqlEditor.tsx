@@ -156,7 +156,38 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
   };
 
   // AI Helper functions
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const resizeImage = (file: File, maxWidth: number = 800, maxHeight: number = 800): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new window.Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let { width, height } = img;
+
+          // 비율 유지하면서 리사이즈
+          if (width > maxWidth || height > maxHeight) {
+            const ratio = Math.min(maxWidth / width, maxHeight / height);
+            width = Math.round(width * ratio);
+            height = Math.round(height * ratio);
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          // JPEG로 변환하여 용량 줄이기
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        };
+        img.src = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -165,13 +196,15 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setAiImage(reader.result as string);
+    try {
+      // 이미지 리사이즈 (최대 800x800)
+      const resizedImage = await resizeImage(file, 800, 800);
+      setAiImage(resizedImage);
       setAiImageName(file.name);
       setAiError(null);
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      setAiError('이미지 처리 중 오류가 발생했습니다.');
+    }
   };
 
   const handleAiGenerate = async () => {

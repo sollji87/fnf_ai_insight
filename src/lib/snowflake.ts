@@ -80,14 +80,18 @@ export async function executeQuery(query: string): Promise<QueryResult> {
   });
 }
 
-export function formatQueryResultForPrompt(result: QueryResult): string {
+export function formatQueryResultForPrompt(result: QueryResult, maxRows: number = 20): string {
   if (result.rows.length === 0) {
     return '데이터가 없습니다.';
   }
 
+  // 데이터가 너무 많으면 상위 20개로 제한
+  const limitedRows = result.rows.slice(0, maxRows);
+  const isLimited = result.rows.length > maxRows;
+
   const headers = result.columns.join(' | ');
   const separator = result.columns.map(() => '---').join(' | ');
-  const rows = result.rows
+  const rows = limitedRows
     .map((row) =>
       '| ' + result.columns.map((col) => {
         const value = row[col];
@@ -99,5 +103,11 @@ export function formatQueryResultForPrompt(result: QueryResult): string {
     )
     .join('\n');
 
-  return `| ${headers} |\n| ${separator} |\n${rows}`;
+  let output = `| ${headers} |\n| ${separator} |\n${rows}`;
+  
+  if (isLimited) {
+    output += `\n\n(총 ${result.rows.length}개 중 상위 ${maxRows}개만 표시 - 전체 데이터는 쿼리 결과에서 확인)`;
+  }
+
+  return output;
 }
