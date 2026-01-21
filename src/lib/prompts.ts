@@ -49,75 +49,13 @@ ${COMMON_GUIDELINES}
 3. 이상징후 및 특이사항
 4. 액션 플랜 제안`;
 
-export const SAMPLE_QUERY_TEMPLATES = [
-  {
-    id: 'brand-sales',
-    name: '브랜드별 매출 현황',
-    description: '브랜드별 매출액, 정가매출, 할인율 분석',
-    query: `-- 브랜드별 매출 현황
-SELECT 
-    brand_name,
-    SUM(act_sale_amt) as total_sales,
-    SUM(tag_sale_amt) as tag_sales,
-    SUM(act_sale_amt) / NULLIF(SUM(tag_sale_amt), 0) as discount_rate
-FROM sales_table
-WHERE sale_date >= DATEADD(month, -1, CURRENT_DATE())
-GROUP BY brand_name
-ORDER BY total_sales DESC;`,
-    category: 'sales' as const,
-  },
-  {
-    id: 'monthly-trend',
-    name: '월별 매출 추이',
-    description: '최근 12개월 매출 추이 분석',
-    query: `-- 월별 매출 추이
-SELECT 
-    DATE_TRUNC('month', sale_date) as month,
-    brand_name,
-    SUM(act_sale_amt) as monthly_sales,
-    SUM(tag_sale_amt) as monthly_tag_sales
-FROM sales_table
-WHERE sale_date >= DATEADD(month, -12, CURRENT_DATE())
-GROUP BY DATE_TRUNC('month', sale_date), brand_name
-ORDER BY month DESC, brand_name;`,
-    category: 'sales' as const,
-  },
-  {
-    id: 'profit-analysis',
-    name: '이익률 분석',
-    description: '브랜드별 직접이익률, 영업이익률 분석',
-    query: `-- 이익률 분석
-SELECT 
-    brand_name,
-    SUM(act_sale_amt) as total_sales,
-    SUM(direct_profit) as total_direct_profit,
-    SUM(operating_profit) as total_operating_profit,
-    SUM(direct_profit) / NULLIF(SUM(act_sale_amt/1.1), 0) as direct_profit_rate,
-    SUM(operating_profit) / NULLIF(SUM(act_sale_amt/1.1), 0) as operating_profit_rate
-FROM profit_table
-WHERE sale_date >= DATEADD(month, -1, CURRENT_DATE())
-GROUP BY brand_name
-ORDER BY direct_profit_rate DESC;`,
-    category: 'profit' as const,
-  },
-  {
-    id: 'discount-analysis',
-    name: '할인율 분석',
-    description: '채널별 할인율 현황',
-    query: `-- 할인율 분석
-SELECT 
-    channel_name,
-    brand_name,
-    SUM(act_sale_amt) as actual_sales,
-    SUM(tag_sale_amt) as tag_sales,
-    SUM(act_sale_amt) / NULLIF(SUM(tag_sale_amt), 0) as discount_rate
-FROM sales_table
-WHERE sale_date >= DATEADD(month, -1, CURRENT_DATE())
-GROUP BY channel_name, brand_name
-ORDER BY discount_rate ASC;`,
-    category: 'discount' as const,
-  },
-];
+export const SAMPLE_QUERY_TEMPLATES: Array<{
+  id: string;
+  name: string;
+  description: string;
+  query: string;
+  category: 'sales' | 'profit' | 'discount' | 'brand' | 'custom';
+}> = [];
 
 export const SAMPLE_BRANDS = [
   'MLB',

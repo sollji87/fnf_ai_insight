@@ -21,7 +21,6 @@ import {
   Database, 
   Save, 
   Trash2,
-  Plus,
   X
 } from 'lucide-react';
 import { SAMPLE_QUERY_TEMPLATES } from '@/lib/prompts';
@@ -36,7 +35,7 @@ interface SqlEditorProps {
 const STORAGE_KEY = 'fnf-saved-queries';
 
 export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorProps) {
-  const [query, setQuery] = useState(SAMPLE_QUERY_TEMPLATES[0].query);
+  const [query, setQuery] = useState('-- SQL 쿼리를 입력하세요\nSELECT * FROM ');
   const [error, setError] = useState<string | null>(null);
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -201,18 +200,25 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
                   <SelectSeparator />
                 </>
               )}
-              <SelectGroup>
-                <SelectLabel className="text-xs text-gray-500 font-medium">기본 템플릿</SelectLabel>
-                {SAMPLE_QUERY_TEMPLATES.map((template) => (
-                  <SelectItem
-                    key={template.id}
-                    value={template.id}
-                    className="text-gray-700 text-sm"
-                  >
-                    {template.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
+              {SAMPLE_QUERY_TEMPLATES.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel className="text-xs text-gray-500 font-medium">기본 템플릿</SelectLabel>
+                  {SAMPLE_QUERY_TEMPLATES.map((template) => (
+                    <SelectItem
+                      key={template.id}
+                      value={template.id}
+                      className="text-gray-700 text-sm"
+                    >
+                      {template.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+              {savedQueries.length === 0 && SAMPLE_QUERY_TEMPLATES.length === 0 && (
+                <div className="px-3 py-2 text-xs text-gray-400 text-center">
+                  저장된 쿼리가 없습니다
+                </div>
+              )}
             </SelectContent>
           </Select>
         </div>
