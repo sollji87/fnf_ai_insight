@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { sql } from '@codemirror/lang-sql';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -23,7 +24,11 @@ import {
   Trash2,
   X,
   Copy,
-  Check
+  Check,
+  Sparkles,
+  Upload,
+  Image as ImageIcon,
+  Wand2,
 } from 'lucide-react';
 import { SAMPLE_QUERY_TEMPLATES } from '@/lib/prompts';
 import type { QueryResult, SavedQuery } from '@/types';
@@ -45,6 +50,15 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
   const [selectedCategory, setSelectedCategory] = useState<SavedQuery['category']>('custom');
   const [selectedQueryId, setSelectedQueryId] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  
+  // AI Query Helper states
+  const [showAiHelper, setShowAiHelper] = useState(false);
+  const [aiRequest, setAiRequest] = useState('');
+  const [aiImage, setAiImage] = useState<string | null>(null);
+  const [aiImageName, setAiImageName] = useState<string | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -64,7 +78,6 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = query;
       document.body.appendChild(textArea);
@@ -105,14 +118,12 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
   const handleQuerySelect = (value: string) => {
     setSelectedQueryId(value);
     
-    // 샘플 템플릿에서 찾기
     const template = SAMPLE_QUERY_TEMPLATES.find((t) => t.id === value);
     if (template) {
       setQuery(template.query);
       return;
     }
     
-    // 저장된 쿼리에서 찾기
     const saved = savedQueries.find((q) => q.id === value);
     if (saved) {
       setQuery(saved.query);
@@ -141,6 +152,63 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
       setError(err instanceof Error ? err.message : '알 수 없는 오류');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // AI Helper functions
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setAiError('이미지 파일만 업로드 가능합니다.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAiImage(reader.result as string);
+      setAiImageName(file.name);
+      setAiError(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAiGenerate = async () => {
+    if (!aiRequest.trim() && !aiImage) {
+      setAiError('요청 내용이나 테이블 이미지를 입력해주세요.');
+      return;
+    }
+
+    setIsAiLoading(true);
+    setAiError(null);
+
+    try {
+      const response = await fetch('/api/query-helper', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentQuery: query,
+          userRequest: aiRequest,
+          tableImage: aiImage,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'AI 쿼리 생성 실패');
+      }
+
+      setQuery(data.query);
+      setShowAiHelper(false);
+      setAiRequest('');
+      setAiImage(null);
+      setAiImageName(null);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : '알 수 없는 오류');
+    } finally {
+      setIsAiLoading(false);
     }
   };
 
@@ -178,6 +246,15 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
           <span className="font-semibold text-gray-900 text-sm">SQL 쿼리</span>
         </div>
         <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowAiHelper(true)}
+            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 h-8 text-xs"
+          >
+            <Sparkles className="w-3.5 h-3.5 mr-1" />
+            AI 도우미
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -356,6 +433,139 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
               >
                 <Save className="w-4 h-4 mr-2" />
                 저장하기
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Query Helper Dialog */}
+      {showAiHelper && (
+        <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-50">
+          <div className="bg-white border border-gray-200 rounded-xl p-5 w-[480px] shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-purple-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">AI 쿼리 도우미</h3>
+                  <p className="text-xs text-gray-500">자연어로 SQL 쿼리를 생성하거나 수정하세요</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowAiHelper(false);
+                  setAiError(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 h-8 w-8 p-0"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Image Upload */}
+              <div>
+                <label className="text-sm text-gray-600 mb-1.5 block flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  테이블 구조 이미지 (선택)
+                </label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+                {aiImage ? (
+                  <div className="relative border border-gray-200 rounded-lg p-3 bg-gray-50">
+                    <div className="flex items-center gap-2">
+                      <div className="w-12 h-12 rounded-lg overflow-hidden bg-white border border-gray-200">
+                        <img src={aiImage} alt="Preview" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm text-gray-700 font-medium truncate">{aiImageName}</p>
+                        <p className="text-xs text-gray-500">이미지 업로드 완료</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setAiImage(null);
+                          setAiImageName(null);
+                        }}
+                        className="text-gray-400 hover:text-red-500 h-8 w-8 p-0"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full border-2 border-dashed border-gray-200 rounded-lg p-4 hover:border-purple-300 hover:bg-purple-50/50 transition-colors"
+                  >
+                    <div className="flex flex-col items-center gap-2">
+                      <Upload className="w-6 h-6 text-gray-400" />
+                      <span className="text-sm text-gray-500">
+                        클릭하여 테이블 구조 캡처 업로드
+                      </span>
+                    </div>
+                  </button>
+                )}
+              </div>
+
+              {/* Request Input */}
+              <div>
+                <label className="text-sm text-gray-600 mb-1.5 block flex items-center gap-1.5">
+                  <Wand2 className="w-3.5 h-3.5" />
+                  요청사항
+                </label>
+                <Textarea
+                  value={aiRequest}
+                  onChange={(e) => setAiRequest(e.target.value)}
+                  placeholder="예: 브랜드별 월간 매출 합계를 구해줘, 할인율 컬럼을 추가해줘, 이 테이블로 SELECT 쿼리 만들어줘..."
+                  className="bg-white border-gray-200 text-gray-900 min-h-[100px] resize-none"
+                />
+              </div>
+
+              {/* Current Query Preview */}
+              {query.trim() && query !== '-- SQL 쿼리를 입력하세요\nSELECT * FROM ' && (
+                <div>
+                  <label className="text-sm text-gray-500 mb-1.5 block">현재 쿼리 (수정 기반)</label>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 max-h-20 overflow-y-auto">
+                    <pre className="text-xs text-gray-600 font-mono whitespace-pre-wrap">{query}</pre>
+                  </div>
+                </div>
+              )}
+
+              {/* Error */}
+              {aiError && (
+                <div className="px-3 py-2 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm">
+                  {aiError}
+                </div>
+              )}
+
+              {/* Actions */}
+              <Button
+                onClick={handleAiGenerate}
+                disabled={isAiLoading || (!aiRequest.trim() && !aiImage)}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                {isAiLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    AI가 쿼리 생성 중...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    쿼리 생성하기
+                  </>
+                )}
               </Button>
             </div>
           </div>
