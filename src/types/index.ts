@@ -39,7 +39,7 @@ export interface QueryTemplate {
   name: string;
   description: string;
   query: string;
-  category: 'sales' | 'profit' | 'discount' | 'brand' | 'custom';
+  category: 'sales' | 'profit' | 'discount' | 'brand' | 'inventory' | 'hr' | 'custom';
   createdAt: string;
 }
 
@@ -54,7 +54,7 @@ export interface SavedQuery {
   id: string;
   name: string;
   query: string;
-  category: 'sales' | 'profit' | 'discount' | 'brand' | 'custom';
+  category: 'sales' | 'profit' | 'discount' | 'brand' | 'inventory' | 'hr' | 'custom';
   createdAt: string;
   createdBy?: string;
 }

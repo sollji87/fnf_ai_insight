@@ -282,11 +282,13 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
   };
 
   const getCategoryLabel = (category: SavedQuery['category']) => {
-    const labels = {
+    const labels: Record<SavedQuery['category'], string> = {
       sales: '매출',
       profit: '이익',
       discount: '할인',
       brand: '브랜드',
+      inventory: '재고',
+      hr: '인원',
       custom: '커스텀',
     };
     return labels[category];
@@ -505,6 +507,8 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
                     <SelectItem value="profit" className="text-gray-700">이익</SelectItem>
                     <SelectItem value="discount" className="text-gray-700">할인</SelectItem>
                     <SelectItem value="brand" className="text-gray-700">브랜드</SelectItem>
+                    <SelectItem value="inventory" className="text-gray-700">재고</SelectItem>
+                    <SelectItem value="hr" className="text-gray-700">인원현황</SelectItem>
                     <SelectItem value="custom" className="text-gray-700">커스텀</SelectItem>
                   </SelectContent>
                 </Select>
