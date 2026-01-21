@@ -39,17 +39,17 @@ interface SqlEditorProps {
   setIsLoading: (loading: boolean) => void;
 }
 
-const STORAGE_KEY = 'fnf-saved-queries';
-
 export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorProps) {
   const [query, setQuery] = useState('-- SQL 쿼리를 입력하세요\nSELECT * FROM ');
   const [error, setError] = useState<string | null>(null);
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [newQueryName, setNewQueryName] = useState('');
+  const [newQueryCreator, setNewQueryCreator] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<SavedQuery['category']>('custom');
   const [selectedQueryId, setSelectedQueryId] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   // AI Query Helper states
   const [showAiHelper, setShowAiHelper] = useState(false);
@@ -60,17 +60,22 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
   const [aiError, setAiError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      setSavedQueries(JSON.parse(stored));
+  // Vercel KV에서 저장된 쿼리 불러오기
+  const fetchSavedQueries = async () => {
+    try {
+      const response = await fetch('/api/saved-queries');
+      const data = await response.json();
+      if (data.success) {
+        setSavedQueries(data.queries || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch saved queries:', err);
     }
-  }, []);
-
-  const saveQueries = (queries: SavedQuery[]) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(queries));
-    setSavedQueries(queries);
   };
+
+  useEffect(() => {
+    fetchSavedQueries();
+  }, []);
 
   const handleCopyQuery = async () => {
     try {
@@ -89,29 +94,60 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
     }
   };
 
-  const handleSaveQuery = () => {
+  const handleSaveQuery = async () => {
     if (!newQueryName.trim()) return;
 
-    const newQuery: SavedQuery = {
-      id: `saved-${Date.now()}`,
-      name: newQueryName.trim(),
-      query: query,
-      category: selectedCategory,
-      createdAt: new Date().toISOString(),
-    };
+    setIsSaving(true);
+    try {
+      const response = await fetch('/api/saved-queries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newQueryName.trim(),
+          query: query,
+          category: selectedCategory,
+          createdBy: newQueryCreator.trim() || '익명',
+        }),
+      });
 
-    saveQueries([newQuery, ...savedQueries]);
-    setNewQueryName('');
-    setShowSaveDialog(false);
-    setSelectedQueryId(newQuery.id);
+      const data = await response.json();
+
+      if (data.success) {
+        await fetchSavedQueries();
+        setNewQueryName('');
+        setNewQueryCreator('');
+        setShowSaveDialog(false);
+        setSelectedQueryId(data.query.id);
+      } else {
+        setError(data.error);
+      }
+    } catch (err) {
+      setError('쿼리 저장에 실패했습니다.');
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDeleteQuery = (id: string, e: React.MouseEvent) => {
+  const handleDeleteQuery = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    saveQueries(savedQueries.filter((q) => q.id !== id));
-    if (selectedQueryId === id) {
-      setSelectedQueryId('');
+    
+    try {
+      const response = await fetch('/api/saved-queries', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+
+      if (response.ok) {
+        await fetchSavedQueries();
+        if (selectedQueryId === id) {
+          setSelectedQueryId('');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete query:', err);
     }
   };
 
@@ -334,7 +370,12 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
                             <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px]">
                               {getCategoryLabel(saved.category)}
                             </span>
-                            {saved.name}
+                            <span className="flex flex-col">
+                              <span>{saved.name}</span>
+                              {saved.createdBy && (
+                                <span className="text-[10px] text-gray-400">by {saved.createdBy}</span>
+                              )}
+                            </span>
                           </span>
                         </SelectItem>
                         <button
@@ -445,6 +486,15 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
                 />
               </div>
               <div>
+                <label className="text-sm text-gray-600 mb-1.5 block">작성자</label>
+                <Input
+                  value={newQueryCreator}
+                  onChange={(e) => setNewQueryCreator(e.target.value)}
+                  placeholder="예: 홍길동 (선택사항)"
+                  className="bg-white border-gray-200 text-gray-900"
+                />
+              </div>
+              <div>
                 <label className="text-sm text-gray-600 mb-1.5 block">카테고리</label>
                 <Select value={selectedCategory} onValueChange={(v) => setSelectedCategory(v as SavedQuery['category'])}>
                   <SelectTrigger className="bg-white border-gray-200 text-gray-900">
@@ -461,11 +511,20 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
               </div>
               <Button
                 onClick={handleSaveQuery}
-                disabled={!newQueryName.trim()}
+                disabled={!newQueryName.trim() || isSaving}
                 className="w-full bg-gray-900 hover:bg-gray-800 text-white"
               >
-                <Save className="w-4 h-4 mr-2" />
-                저장하기
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    저장 중...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    저장하기 (모든 사용자 공유)
+                  </>
+                )}
               </Button>
             </div>
           </div>

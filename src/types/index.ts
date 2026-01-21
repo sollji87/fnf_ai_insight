@@ -56,4 +56,5 @@ export interface SavedQuery {
   query: string;
   category: 'sales' | 'profit' | 'discount' | 'brand' | 'custom';
   createdAt: string;
+  createdBy?: string;
 }
