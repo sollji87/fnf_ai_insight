@@ -50,7 +50,7 @@ function truncatePromptIfNeeded(prompt: string, maxTokens: number = 150000): str
 export async function generateInsight(
   systemPrompt: string,
   userPrompt: string,
-  model: string = 'claude-sonnet-4-20250514'
+  model: string = 'claude-sonnet-4-5-20250929'
 ): Promise<InsightResponse> {
   const startTime = Date.now();
 

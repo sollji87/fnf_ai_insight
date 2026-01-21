@@ -60,6 +60,11 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
   const [aiError, setAiError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Table selection states
+  const [availableTables, setAvailableTables] = useState<string[]>([]);
+  const [selectedTables, setSelectedTables] = useState<string[]>([]);
+  const [isLoadingTables, setIsLoadingTables] = useState(false);
+
   // Vercel KV에서 저장된 쿼리 불러오기
   const fetchSavedQueries = async () => {
     try {
@@ -73,8 +78,25 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
     }
   };
 
+  // Snowflake 테이블 목록 가져오기
+  const fetchTableList = async () => {
+    setIsLoadingTables(true);
+    try {
+      const response = await fetch('/api/tables');
+      const data = await response.json();
+      if (data.success) {
+        setAvailableTables(data.tables || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch table list:', err);
+    } finally {
+      setIsLoadingTables(false);
+    }
+  };
+
   useEffect(() => {
     fetchSavedQueries();
+    fetchTableList();
   }, []);
 
   const handleCopyQuery = async () => {
@@ -244,8 +266,8 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
   };
 
   const handleAiGenerate = async () => {
-    if (!aiRequest.trim() && !aiImage) {
-      setAiError('요청 내용이나 테이블 이미지를 입력해주세요.');
+    if (!aiRequest.trim() && !aiImage && selectedTables.length === 0) {
+      setAiError('요청 내용, 테이블 이미지, 또는 테이블을 선택해주세요.');
       return;
     }
 
@@ -260,6 +282,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
           currentQuery: query,
           userRequest: aiRequest,
           tableImage: aiImage,
+          tables: selectedTables,
         }),
       });
 
@@ -274,6 +297,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
       setAiRequest('');
       setAiImage(null);
       setAiImageName(null);
+      setSelectedTables([]);
     } catch (err) {
       setAiError(err instanceof Error ? err.message : '알 수 없는 오류');
     } finally {
@@ -563,6 +587,67 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
             </div>
 
             <div className="space-y-4">
+              {/* Table Selection */}
+              <div>
+                <label className="text-sm text-gray-600 mb-1.5 block flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5" />
+                  Snowflake 테이블 선택 (자동으로 스키마 가져옴)
+                </label>
+                {isLoadingTables ? (
+                  <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                    <span className="text-sm text-gray-500">테이블 목록 로딩 중...</span>
+                  </div>
+                ) : availableTables.length > 0 ? (
+                  <div className="border border-gray-200 rounded-lg bg-white max-h-48 overflow-y-auto">
+                    <div className="p-2 space-y-1">
+                      {availableTables.map((table) => (
+                        <label
+                          key={table}
+                          className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedTables.includes(table)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedTables([...selectedTables, table]);
+                              } else {
+                                setSelectedTables(selectedTables.filter((t) => t !== table));
+                              }
+                            }}
+                            className="w-4 h-4 text-purple-600 rounded border-gray-300"
+                          />
+                          <span className="text-sm text-gray-700">{table}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                    <p className="text-sm text-gray-500">테이블을 찾을 수 없습니다.</p>
+                  </div>
+                )}
+                {selectedTables.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {selectedTables.map((table) => (
+                      <span
+                        key={table}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs"
+                      >
+                        {table}
+                        <button
+                          onClick={() => setSelectedTables(selectedTables.filter((t) => t !== table))}
+                          className="hover:text-purple-900"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Image Upload */}
               <div>
                 <label className="text-sm text-gray-600 mb-1.5 block flex items-center gap-1.5">
