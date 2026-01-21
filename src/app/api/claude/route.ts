@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     const result = await generateInsight(
       systemPrompt || '',
       userPrompt,
-      model || 'claude-sonnet-4-20250514'
+      model || 'claude-sonnet-4-5-20250929'
     );
 
     return NextResponse.json({

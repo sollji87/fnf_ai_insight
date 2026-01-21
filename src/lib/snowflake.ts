@@ -101,3 +101,83 @@ export function formatQueryResultForPrompt(result: QueryResult): string {
 
   return `| ${headers} |\n| ${separator} |\n${rows}`;
 }
+
+// 테이블 목록 가져오기
+export async function getTableList(): Promise<string[]> {
+  const connection = await createSnowflakeConnection();
+
+  return new Promise((resolve, reject) => {
+    const query = `SHOW TABLES IN SCHEMA ${process.env.SNOWFLAKE_DATABASE}.${process.env.SNOWFLAKE_SCHEMA}`;
+
+    connection.execute({
+      sqlText: query,
+      complete: (err, _stmt, rows) => {
+        connection.destroy(() => {});
+
+        if (err) {
+          reject(new Error(`테이블 목록 조회 실패: ${err.message}`));
+          return;
+        }
+
+        const tables = (rows || []).map((row) => {
+          // SHOW TABLES는 'name' 컬럼에 테이블 이름이 있습니다
+          return String(row['name'] || '');
+        }).filter(Boolean);
+
+        resolve(tables);
+      },
+    });
+  });
+}
+
+// 특정 테이블의 스키마 정보 가져오기
+export async function getTableSchema(tableName: string): Promise<string> {
+  const connection = await createSnowflakeConnection();
+
+  return new Promise((resolve, reject) => {
+    const query = `DESCRIBE TABLE ${tableName}`;
+
+    connection.execute({
+      sqlText: query,
+      complete: (err, _stmt, rows) => {
+        connection.destroy(() => {});
+
+        if (err) {
+          reject(new Error(`테이블 스키마 조회 실패: ${err.message}`));
+          return;
+        }
+
+        if (!rows || rows.length === 0) {
+          resolve('테이블 정보를 찾을 수 없습니다.');
+          return;
+        }
+
+        // 스키마 정보를 읽기 쉬운 형식으로 변환
+        const schemaText = rows.map((row) => {
+          const name = row['name'] || '';
+          const type = row['type'] || '';
+          const nullable = row['null?'] === 'Y' ? 'NULL' : 'NOT NULL';
+          const comment = row['comment'] ? ` -- ${row['comment']}` : '';
+          return `  ${name} ${type} ${nullable}${comment}`;
+        }).join('\n');
+
+        resolve(`테이블: ${tableName}\n컬럼:\n${schemaText}`);
+      },
+    });
+  });
+}
+
+// 여러 테이블의 스키마 정보 가져오기
+export async function getMultipleTableSchemas(tableNames: string[]): Promise<string> {
+  const schemas = await Promise.all(
+    tableNames.map(async (tableName) => {
+      try {
+        return await getTableSchema(tableName);
+      } catch (error) {
+        return `테이블 ${tableName}: 스키마 조회 실패`;
+      }
+    })
+  );
+
+  return schemas.join('\n\n---\n\n');
+}

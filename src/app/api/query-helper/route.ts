@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { getMultipleTableSchemas } from '@/lib/snowflake';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -7,11 +8,11 @@ const anthropic = new Anthropic({
 
 export async function POST(request: NextRequest) {
   try {
-    const { currentQuery, userRequest, tableImage } = await request.json();
+    const { currentQuery, userRequest, tableImage, tables } = await request.json();
 
-    if (!userRequest && !tableImage) {
+    if (!userRequest && !tableImage && (!tables || tables.length === 0)) {
       return NextResponse.json(
-        { error: '요청 내용이나 테이블 이미지가 필요합니다.' },
+        { error: '요청 내용, 테이블 이미지, 또는 테이블 목록이 필요합니다.' },
         { status: 400 }
       );
     }
@@ -44,9 +45,23 @@ export async function POST(request: NextRequest) {
 
 `;
 
+    // Snowflake에서 실제 테이블 스키마 가져오기
+    if (tables && tables.length > 0) {
+      try {
+        const schemaInfo = await getMultipleTableSchemas(tables);
+        prompt += `## 데이터베이스 테이블 구조 (실제 Snowflake에서 조회)
+${schemaInfo}
+
+`;
+      } catch (error) {
+        console.error('테이블 스키마 조회 오류:', error);
+        // 스키마 조회 실패해도 계속 진행
+      }
+    }
+
     if (tableImage) {
-      prompt += `## 테이블 구조
-위 이미지는 테이블 구조입니다. 이 구조를 참고하여 쿼리를 작성하세요.
+      prompt += `## 추가 테이블 구조 (이미지)
+위 이미지에도 테이블 구조가 있을 수 있습니다. 이것도 참고하여 쿼리를 작성하세요.
 
 `;
     }
@@ -77,7 +92,7 @@ SQL 쿼리만 반환하세요:`;
     });
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 2000,
       messages,
     });
