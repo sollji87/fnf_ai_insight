@@ -1,168 +1,142 @@
 'use client';
 
+import { useState } from 'react';
+import { SqlEditor } from '@/components/dashboard/SqlEditor';
+import { PromptEditor } from '@/components/dashboard/PromptEditor';
+import { DataPreview } from '@/components/dashboard/DataPreview';
+import { InsightViewer } from '@/components/dashboard/InsightViewer';
+import { BrandSummary } from '@/components/dashboard/BrandSummary';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, Github, Copy, Sparkles } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
-import { useToast } from '@/hooks/use-toast';
-import axios from 'axios';
+import { LayoutGrid, Sparkles } from 'lucide-react';
+import type { QueryResult, InsightResponse } from '@/types';
 
-const PACKAGE_NAME = '@easynext/cli';
-const CURRENT_VERSION = 'v0.1.38';
+export default function HomePage() {
+  const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
+  const [currentQuery, setCurrentQuery] = useState('');
+  const [insightResponse, setInsightResponse] = useState<InsightResponse | null>(null);
+  const [isQueryLoading, setIsQueryLoading] = useState(false);
+  const [isInsightLoading, setIsInsightLoading] = useState(false);
+  const [showBrandSummary, setShowBrandSummary] = useState(false);
+  const [activeTab, setActiveTab] = useState<'data' | 'insight'>('data');
 
-function latestVersion(packageName: string) {
-  return axios
-    .get('https://registry.npmjs.org/' + packageName + '/latest')
-    .then((res) => res.data.version);
-}
-
-export default function Home() {
-  const { toast } = useToast();
-  const [latest, setLatest] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchLatestVersion = async () => {
-      try {
-        const version = await latestVersion(PACKAGE_NAME);
-        setLatest(`v${version}`);
-      } catch (error) {
-        console.error('Failed to fetch version info:', error);
-      }
-    };
-    fetchLatestVersion();
-  }, []);
-
-  const handleCopyCommand = () => {
-    navigator.clipboard.writeText(`npm install -g ${PACKAGE_NAME}@latest`);
-    toast({
-      description: 'Update command copied to clipboard',
-    });
+  const handleQueryResult = (result: QueryResult, query: string) => {
+    setQueryResult(result);
+    setCurrentQuery(query);
+    setActiveTab('data');
   };
 
-  const needsUpdate = latest && latest !== CURRENT_VERSION;
+  const handleInsightGenerated = (response: InsightResponse) => {
+    setInsightResponse(response);
+    setActiveTab('insight');
+  };
 
   return (
-    <div className="flex min-h-screen relative overflow-hidden">
-      {/* Main Content */}
-      <div className="min-h-screen flex bg-gray-100">
-        <div className="flex flex-col p-5 md:p-8 space-y-4">
-          <h1 className="text-3xl md:text-5xl font-semibold tracking-tighter !leading-tight text-left">
-            Easiest way to start
-            <br /> Next.js project
-            <br /> with Cursor
-          </h1>
-
-          <p className="text-lg text-muted-foreground">
-            Get Pro-created Next.js bootstrap just in seconds
-          </p>
-
-          <div className="flex items-center gap-2">
+    <div className="min-h-screen bg-[#fafafa]">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-gray-900 flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-gray-900">
+                  F&F AI 인사이트 대시보드
+                </h1>
+                <p className="text-xs text-gray-500">
+                  스노우플레이크 데이터 기반 Claude AI 분석 플랫폼
+                </p>
+              </div>
+            </div>
             <Button
-              asChild
-              size="lg"
-              variant="secondary"
-              className="gap-2 w-fit rounded-full px-4 py-2 border border-black"
+              onClick={() => setShowBrandSummary(true)}
+              className="bg-gray-900 hover:bg-gray-800 text-white"
             >
-              <a href="https://github.com/easynextjs/easynext" target="_blank">
-                <Github className="w-4 h-4" />
-                GitHub
-              </a>
-            </Button>
-            <Button
-              asChild
-              size="lg"
-              variant="secondary"
-              className="gap-2 w-fit rounded-full px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white"
-            >
-              <a href="https://easynext.org/premium" target="_blank">
-                <Sparkles className="w-4 h-4" />
-                Premium
-              </a>
+              <LayoutGrid className="w-4 h-4 mr-2" />
+              브랜드별 요약
             </Button>
           </div>
-          <Section />
         </div>
-      </div>
+      </header>
 
-      <div className="min-h-screen ml-16 flex-1 flex flex-col items-center justify-center space-y-4">
-        <div className="flex flex-col items-center space-y-2">
-          <p className="text-muted-foreground">
-            Current Version: {CURRENT_VERSION}
-          </p>
-          <p className="text-muted-foreground">
-            Latest Version:{' '}
-            <span className="font-bold">{latest || 'Loading...'}</span>
-          </p>
-        </div>
-
-        {needsUpdate && (
-          <div className="flex flex-col items-center space-y-2">
-            <p className="text-yellow-600">New version available!</p>
-            <p className="text-sm text-muted-foreground">
-              Copy and run the command below to update:
-            </p>
-            <div className="relative group">
-              <pre className="bg-gray-100 p-4 rounded-lg">
-                npm install -g {PACKAGE_NAME}@latest
-              </pre>
-              <button
-                onClick={handleCopyCommand}
-                className="absolute top-2 right-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <Copy className="w-4 h-4" />
-              </button>
+      {/* Main Content */}
+      <main className="container mx-auto px-6 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-[calc(100vh-120px)]">
+          {/* Left Panel - Editors */}
+          <div className="lg:col-span-5 flex flex-col gap-5">
+            <div className="h-[45%]">
+              <SqlEditor
+                onQueryResult={handleQueryResult}
+                isLoading={isQueryLoading}
+                setIsLoading={setIsQueryLoading}
+              />
+            </div>
+            <div className="h-[55%]">
+              <PromptEditor
+                queryResult={queryResult}
+                currentQuery={currentQuery}
+                onInsightGenerated={handleInsightGenerated}
+                isLoading={isInsightLoading}
+                setIsLoading={setIsInsightLoading}
+              />
             </div>
           </div>
-        )}
-      </div>
+
+          {/* Right Panel - Results */}
+          <div className="lg:col-span-7 flex flex-col">
+            {/* Tab Buttons */}
+            <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-lg w-fit">
+              <button
+                onClick={() => setActiveTab('data')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  activeTab === 'data'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <span className="mr-1.5">📊</span>
+                쿼리 결과
+                {queryResult && (
+                  <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
+                    {queryResult.rowCount}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('insight')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  activeTab === 'insight'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <span className="mr-1.5">💡</span>
+                AI 인사이트
+                {insightResponse && (
+                  <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
+                    {(insightResponse.responseTime / 1000).toFixed(1)}s
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Content Area */}
+            <div className="flex-1 min-h-0">
+              {activeTab === 'data' ? (
+                <DataPreview queryResult={queryResult} />
+              ) : (
+                <InsightViewer insightResponse={insightResponse} />
+              )}
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Brand Summary Modal */}
+      {showBrandSummary && (
+        <BrandSummary onClose={() => setShowBrandSummary(false)} />
+      )}
     </div>
-  );
-}
-
-function Section() {
-  const items = [
-    { href: 'https://nextjs.org/', label: 'Next.js' },
-    { href: 'https://ui.shadcn.com/', label: 'shadcn/ui' },
-    { href: 'https://tailwindcss.com/', label: 'Tailwind CSS' },
-    { href: 'https://www.framer.com/motion/', label: 'framer-motion' },
-    { href: 'https://zod.dev/', label: 'zod' },
-    { href: 'https://date-fns.org/', label: 'date-fns' },
-    { href: 'https://ts-pattern.dev/', label: 'ts-pattern' },
-    { href: 'https://es-toolkit.dev/', label: 'es-toolkit' },
-    { href: 'https://zustand.docs.pmnd.rs/', label: 'zustand' },
-    { href: 'https://supabase.com/', label: 'supabase' },
-    { href: 'https://react-hook-form.com/', label: 'react-hook-form' },
-  ];
-
-  return (
-    <div className="flex flex-col py-5 md:py-8 space-y-2 opacity-75">
-      <p className="font-semibold">What&apos;s Included</p>
-
-      <div className="flex flex-col space-y-1 text-muted-foreground">
-        {items.map((item) => (
-          <SectionItem key={item.href} href={item.href}>
-            {item.label}
-          </SectionItem>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SectionItem({
-  children,
-  href,
-}: {
-  children: React.ReactNode;
-  href: string;
-}) {
-  return (
-    <a
-      href={href}
-      className="flex items-center gap-2 underline"
-      target="_blank"
-    >
-      <CheckCircle className="w-4 h-4" />
-      <p>{children}</p>
-    </a>
   );
 }
