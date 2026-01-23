@@ -74,6 +74,7 @@ ORDER BY total_sales DESC;`);
 
   // 인사이트 상세보기 상태
   const [viewingInsight, setViewingInsight] = useState<SavedInsight | null>(null);
+  const [isQueryCollapsed, setIsQueryCollapsed] = useState(true);
 
   // 저장된 인사이트 불러오기
   const fetchSavedInsights = async () => {
@@ -826,13 +827,40 @@ ORDER BY total_sales DESC;`);
               {/* SQL 쿼리 */}
               {viewingInsight.query && (
                 <div className="border-t border-gray-200 pt-4">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-blue-500" />
-                    사용된 SQL 쿼리
-                  </h4>
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-[200px] overflow-y-auto">
-                    <pre className="text-xs text-gray-700 font-mono whitespace-pre-wrap">{viewingInsight.query}</pre>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-blue-500" />
+                      사용된 SQL 쿼리
+                    </h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsQueryCollapsed(!isQueryCollapsed)}
+                      className="h-6 text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      {isQueryCollapsed ? (
+                        <>
+                          <ChevronDown className="w-3 h-3 mr-1" />
+                          펼치기
+                        </>
+                      ) : (
+                        <>
+                          <ChevronUp className="w-3 h-3 mr-1" />
+                          접기
+                        </>
+                      )}
+                    </Button>
                   </div>
+                  {!isQueryCollapsed && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-[200px] overflow-y-auto">
+                      <pre className="text-xs text-gray-700 font-mono whitespace-pre-wrap">{viewingInsight.query}</pre>
+                    </div>
+                  )}
+                  {isQueryCollapsed && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-2">
+                      <p className="text-xs text-gray-500 truncate">{viewingInsight.query.split('\n')[0]}...</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
