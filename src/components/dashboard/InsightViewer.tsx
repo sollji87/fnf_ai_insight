@@ -11,9 +11,10 @@ interface InsightViewerProps {
   insightResponse: InsightResponse | null;
   currentQuery?: string;
   brandName?: string;
+  analysisRequest?: string;
 }
 
-export function InsightViewer({ insightResponse, currentQuery, brandName }: InsightViewerProps) {
+export function InsightViewer({ insightResponse, currentQuery, brandName, analysisRequest }: InsightViewerProps) {
   const [copied, setCopied] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveTitle, setSaveTitle] = useState('');
@@ -57,6 +58,7 @@ export function InsightViewer({ insightResponse, currentQuery, brandName }: Insi
           brandName: saveBrandName.trim() || undefined,
           insight: insightResponse.insight,
           query: currentQuery,
+          analysisRequest: analysisRequest,
           tokensUsed: insightResponse.tokensUsed,
           model: insightResponse.model,
           createdBy: createdBy.trim() || '익명',

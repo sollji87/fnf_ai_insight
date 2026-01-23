@@ -15,6 +15,7 @@ interface PromptEditorProps {
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   onGenerateReady?: (generateFn: () => Promise<void>) => void;
+  onAnalysisRequestChange?: (request: string) => void;
 }
 
 const COMMON_PROMPT_KEY = 'fnf-common-prompt';
@@ -40,6 +41,7 @@ export function PromptEditor({
   isLoading,
   setIsLoading,
   onGenerateReady,
+  onAnalysisRequestChange,
 }: PromptEditorProps) {
   const [systemPrompt, setSystemPrompt] = useState(SYSTEM_PROMPT);
   const [userPrompt, setUserPrompt] = useState('');
@@ -68,10 +70,13 @@ export function PromptEditor({
     }
   }, []);
 
-  // 분석 요청사항 자동 저장
+  // 분석 요청사항 자동 저장 및 부모에게 전달
   useEffect(() => {
     localStorage.setItem(ANALYSIS_REQUEST_KEY, analysisRequest);
-  }, [analysisRequest]);
+    if (onAnalysisRequestChange) {
+      onAnalysisRequestChange(analysisRequest);
+    }
+  }, [analysisRequest, onAnalysisRequestChange]);
 
   // 추가 요청사항 자동 저장
   useEffect(() => {

@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { title, brandName, insight, query, tokensUsed, model, createdBy } = await request.json();
+    const { title, brandName, insight, query, analysisRequest, tokensUsed, model, createdBy } = await request.json();
 
     if (!title || !insight) {
       return NextResponse.json(
@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
       brandName: brandName || undefined,
       insight,
       query: query || undefined,
+      analysisRequest: analysisRequest || undefined,
       tokensUsed: tokensUsed || 0,
       model: model || 'unknown',
       createdAt: new Date().toISOString(),

@@ -13,6 +13,7 @@ import type { QueryResult, InsightResponse } from '@/types';
 export default function HomePage() {
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [currentQuery, setCurrentQuery] = useState('');
+  const [currentAnalysisRequest, setCurrentAnalysisRequest] = useState('');
   const [insightResponse, setInsightResponse] = useState<InsightResponse | null>(null);
   const [isQueryLoading, setIsQueryLoading] = useState(false);
   const [isInsightLoading, setIsInsightLoading] = useState(false);
@@ -91,6 +92,7 @@ export default function HomePage() {
                 isLoading={isInsightLoading}
                 setIsLoading={setIsInsightLoading}
                 onGenerateReady={handleGenerateReady}
+                onAnalysisRequestChange={setCurrentAnalysisRequest}
               />
             </div>
           </div>
@@ -160,7 +162,11 @@ export default function HomePage() {
               {activeTab === 'data' ? (
                 <DataPreview queryResult={queryResult} />
               ) : (
-                <InsightViewer insightResponse={insightResponse} currentQuery={currentQuery} />
+                <InsightViewer 
+                  insightResponse={insightResponse} 
+                  currentQuery={currentQuery} 
+                  analysisRequest={currentAnalysisRequest}
+                />
               )}
             </div>
           </div>

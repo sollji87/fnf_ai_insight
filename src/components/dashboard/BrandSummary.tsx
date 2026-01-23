@@ -793,7 +793,8 @@ ORDER BY total_sales DESC;`);
             </div>
 
             {/* 모달 콘텐츠 */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* 인사이트 내용 */}
               <article className="prose prose-sm max-w-none
                 prose-headings:text-gray-900 prose-headings:font-semibold
                 prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
@@ -808,6 +809,32 @@ ORDER BY total_sales DESC;`);
                   {viewingInsight.insight}
                 </ReactMarkdown>
               </article>
+
+              {/* 분석 요청 프롬프트 */}
+              {viewingInsight.analysisRequest && (
+                <div className="border-t border-gray-200 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                    분석 요청 프롬프트
+                  </h4>
+                  <div className="bg-purple-50 border border-purple-100 rounded-lg p-3">
+                    <p className="text-sm text-purple-900 whitespace-pre-wrap">{viewingInsight.analysisRequest}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* SQL 쿼리 */}
+              {viewingInsight.query && (
+                <div className="border-t border-gray-200 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-blue-500" />
+                    사용된 SQL 쿼리
+                  </h4>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-[200px] overflow-y-auto">
+                    <pre className="text-xs text-gray-700 font-mono whitespace-pre-wrap">{viewingInsight.query}</pre>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 모달 푸터 */}

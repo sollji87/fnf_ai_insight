@@ -65,6 +65,7 @@ export interface SavedInsight {
   brandName?: string;
   insight: string;
   query?: string;
+  analysisRequest?: string;
   tokensUsed: number;
   model: string;
   createdAt: string;
