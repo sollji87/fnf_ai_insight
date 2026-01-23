@@ -82,8 +82,17 @@ export async function generateInsight(
 }
 
 export async function generateBrandSummary(
-  brandInsights: { brandName: string; insight: string }[]
+  brandInsights: { brandName: string; insight: string }[],
+  customPrompt?: string
 ): Promise<InsightResponse> {
+  const defaultInstructions = `위 브랜드별 인사이트를 바탕으로 다음 내용을 포함하여 종합 분석해주세요:
+1. 전체 브랜드 성과 요약
+2. 브랜드간 비교 분석 (강점/약점)
+3. 주목해야 할 이상징후
+4. 전사 차원의 전략적 제언`;
+
+  const userInstructions = customPrompt || defaultInstructions;
+
   const summaryPrompt = `다음은 각 브랜드별 AI 분석 인사이트입니다. 이를 종합하여 전체 브랜드 요약 및 비교 분석을 마크다운 형식으로 작성해주세요.
 
 ${brandInsights
@@ -94,11 +103,9 @@ ${bi.insight}
   )
   .join('\n---\n\n')}
 
-위 브랜드별 인사이트를 바탕으로 다음 내용을 포함하여 종합 분석해주세요:
-1. 전체 브랜드 성과 요약
-2. 브랜드간 비교 분석 (강점/약점)
-3. 주목해야 할 이상징후
-4. 전사 차원의 전략적 제언`;
+<분석 지침>
+${userInstructions}
+</분석 지침>`;
 
   return generateInsight(SYSTEM_PROMPT, summaryPrompt);
 }

@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { brandInsights } = await request.json();
+    const { brandInsights, customPrompt } = await request.json();
 
     if (!brandInsights || !Array.isArray(brandInsights)) {
       return NextResponse.json(
@@ -65,7 +65,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const summaryResult = await generateBrandSummary(brandInsights);
+    const summaryResult = await generateBrandSummary(brandInsights, customPrompt);
 
     return NextResponse.json({
       success: true,

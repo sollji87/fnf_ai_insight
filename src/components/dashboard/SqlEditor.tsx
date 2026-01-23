@@ -29,6 +29,8 @@ import {
   Upload,
   Image as ImageIcon,
   Wand2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { SAMPLE_QUERY_TEMPLATES } from '@/lib/prompts';
 import type { QueryResult, SavedQuery } from '@/types';
@@ -64,6 +66,9 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
   const [availableTables, setAvailableTables] = useState<string[]>([]);
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
   const [isLoadingTables, setIsLoadingTables] = useState(false);
+  
+  // Query editor collapse state
+  const [isEditorCollapsed, setIsEditorCollapsed] = useState(false);
 
   // Vercel KV에서 저장된 쿼리 불러오기
   const fetchSavedQueries = async () => {
@@ -452,8 +457,26 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
         </div>
       </div>
 
+      {/* Editor Toggle */}
+      <div className="px-4 py-2 border-b border-gray-100 bg-gray-50/30">
+        <button
+          onClick={() => setIsEditorCollapsed(!isEditorCollapsed)}
+          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 transition-colors w-full"
+        >
+          {isEditorCollapsed ? (
+            <ChevronDown className="w-3.5 h-3.5" />
+          ) : (
+            <ChevronUp className="w-3.5 h-3.5" />
+          )}
+          <span>쿼리 {isEditorCollapsed ? '펼치기' : '접기'}</span>
+          <span className="ml-auto text-gray-400">
+            {query.split('\n').length}줄
+          </span>
+        </button>
+      </div>
+
       {/* Editor */}
-      <div className="flex-1 overflow-hidden">
+      <div className={`overflow-hidden transition-all duration-200 ${isEditorCollapsed ? 'h-0' : 'flex-1'}`}>
         <CodeMirror
           value={query}
           height="100%"
@@ -469,6 +492,15 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
           }}
         />
       </div>
+      
+      {/* Collapsed Preview */}
+      {isEditorCollapsed && (
+        <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
+          <pre className="text-xs text-gray-500 font-mono truncate">
+            {query.split('\n').slice(0, 2).join(' ').substring(0, 80)}...
+          </pre>
+        </div>
+      )}
 
       {/* Error */}
       {error && (

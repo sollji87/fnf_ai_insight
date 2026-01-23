@@ -21,6 +21,9 @@ import {
   RefreshCw,
   BookOpen,
   Save,
+  Settings,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { SAMPLE_BRANDS, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE } from '@/lib/prompts';
 import type { BrandInsight, InsightResponse, SavedInsight } from '@/types';
@@ -56,6 +59,17 @@ ORDER BY total_sales DESC;`);
   // 요약 보고서 저장 관련 상태
   const [isSavingReport, setIsSavingReport] = useState(false);
   const [reportSaved, setReportSaved] = useState(false);
+
+  // 프롬프트 지침 상태
+  const [showPromptSettings, setShowPromptSettings] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState(
+    `다음 사항에 초점을 맞춰 분석해주세요:
+1. 핵심 성과 (매출, 성장률, 수익성)
+2. 주요 리스크 및 개선 필요 사항
+3. CEO 전략 방향 및 액션 플랜
+
+※ 분량: A4 1-2페이지 내외로 간결하게 작성`
+  );
 
   // 저장된 인사이트 불러오기
   const fetchSavedInsights = async () => {
@@ -116,6 +130,7 @@ ORDER BY total_sales DESC;`);
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           brandInsights: selectedData,
+          customPrompt: customPrompt.trim() || undefined,
         }),
       });
 
@@ -474,6 +489,35 @@ ORDER BY total_sales DESC;`);
                         </Button>
                       </div>
                     ))
+                  )}
+                </div>
+
+                {/* 프롬프트 지침 설정 */}
+                <div className="mb-3">
+                  <button
+                    onClick={() => setShowPromptSettings(!showPromptSettings)}
+                    className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 transition-colors w-full"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span>분석 지침 설정</span>
+                    {showPromptSettings ? (
+                      <ChevronUp className="w-3.5 h-3.5 ml-auto" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 ml-auto" />
+                    )}
+                  </button>
+                  {showPromptSettings && (
+                    <div className="mt-2">
+                      <Textarea
+                        value={customPrompt}
+                        onChange={(e) => setCustomPrompt(e.target.value)}
+                        placeholder="분석 시 AI에게 전달할 지침을 입력하세요..."
+                        className="text-xs min-h-[100px] bg-white border-gray-200 text-gray-900 resize-none"
+                      />
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        예: 핵심 성과, 주요 리스크, CEO 전략 방향에 초점
+                      </p>
+                    </div>
                   )}
                 </div>
 

@@ -227,7 +227,7 @@ ${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n
           <Textarea
             value={analysisRequest}
             onChange={(e) => setAnalysisRequest(e.target.value)}
-            className="min-h-[60px] bg-white border-gray-200 text-gray-900 resize-none text-sm"
+            className="min-h-[240px] bg-white border-gray-200 text-gray-900 resize-none text-sm"
             placeholder="분석 요청사항을 입력하세요..."
           />
         </div>
