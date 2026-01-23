@@ -24,6 +24,7 @@ import {
   Settings,
   ChevronDown,
   ChevronUp,
+  Eye,
 } from 'lucide-react';
 import { SAMPLE_BRANDS, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE } from '@/lib/prompts';
 import type { BrandInsight, InsightResponse, SavedInsight } from '@/types';
@@ -70,6 +71,9 @@ ORDER BY total_sales DESC;`);
 
 ※ 분량: A4 1-2페이지 내외로 간결하게 작성`
   );
+
+  // 인사이트 상세보기 상태
+  const [viewingInsight, setViewingInsight] = useState<SavedInsight | null>(null);
 
   // 저장된 인사이트 불러오기
   const fetchSavedInsights = async () => {
@@ -479,14 +483,26 @@ ORDER BY total_sales DESC;`);
                             {new Date(insight.createdAt).toLocaleDateString('ko-KR')} · {insight.createdBy}
                           </p>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteInsight(insight.id)}
-                          className="h-6 w-6 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setViewingInsight(insight)}
+                            className="h-6 w-6 p-0 text-gray-400 hover:text-blue-500 hover:bg-blue-50"
+                            title="내용 보기"
+                          >
+                            <Eye className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteInsight(insight.id)}
+                            className="h-6 w-6 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                            title="삭제"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
                       </div>
                     ))
                   )}
@@ -746,6 +762,71 @@ ORDER BY total_sales DESC;`);
           </div>
         </div>
       </div>
+
+      {/* 인사이트 상세보기 모달 */}
+      {viewingInsight && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-6">
+          <div className="w-full max-w-3xl max-h-[85vh] rounded-xl bg-white border border-gray-200 flex flex-col overflow-hidden shadow-2xl">
+            {/* 모달 헤더 */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50/50 flex-shrink-0">
+              <div className="flex-1 min-w-0 pr-4">
+                <h3 className="text-base font-bold text-gray-900 truncate">{viewingInsight.title}</h3>
+                <div className="flex items-center gap-2 mt-1">
+                  {viewingInsight.brandName && (
+                    <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-600 rounded">
+                      {viewingInsight.brandName}
+                    </span>
+                  )}
+                  <span className="text-xs text-gray-400">
+                    {new Date(viewingInsight.createdAt).toLocaleDateString('ko-KR')} · {viewingInsight.createdBy}
+                  </span>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewingInsight(null)}
+                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 h-8 w-8 p-0 flex-shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* 모달 콘텐츠 */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <article className="prose prose-sm max-w-none
+                prose-headings:text-gray-900 prose-headings:font-semibold
+                prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
+                prose-p:text-gray-700 prose-p:leading-relaxed
+                prose-li:text-gray-700 prose-li:marker:text-gray-400
+                prose-strong:text-gray-900 prose-strong:font-semibold
+                prose-table:border-collapse prose-table:w-full
+                prose-th:bg-gray-50 prose-th:text-gray-700 prose-th:px-4 prose-th:py-2 prose-th:border prose-th:border-gray-200 prose-th:text-left prose-th:font-semibold prose-th:text-sm
+                prose-td:px-4 prose-td:py-2 prose-td:border prose-td:border-gray-200 prose-td:text-gray-700 prose-td:text-sm
+              ">
+                <ReactMarkdown remarkPlugins={[[remarkGfm, { strikethrough: false }]]}>
+                  {viewingInsight.insight}
+                </ReactMarkdown>
+              </article>
+            </div>
+
+            {/* 모달 푸터 */}
+            <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/50 flex-shrink-0">
+              <span className="text-xs text-gray-400">
+                {viewingInsight.tokensUsed.toLocaleString()} 토큰 · {viewingInsight.model}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setViewingInsight(null)}
+                className="text-gray-600 border-gray-200"
+              >
+                닫기
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
