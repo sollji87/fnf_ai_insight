@@ -183,7 +183,7 @@ export function InsightViewer({ insightResponse, currentQuery, brandName }: Insi
           prose-blockquote:border-l-gray-300 prose-blockquote:bg-gray-50 prose-blockquote:py-1 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic
           prose-hr:border-gray-200
         ">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          <ReactMarkdown remarkPlugins={[[remarkGfm, { strikethrough: false }]]}>
             {insightResponse.insight}
           </ReactMarkdown>
         </article>

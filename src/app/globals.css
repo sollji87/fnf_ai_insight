@@ -98,8 +98,13 @@ textarea {
   font-family: var(--font-pretendard) !important;
 }
 
-/* Disable strikethrough in prose - prevents ~범위~ from being parsed as strikethrough */
+/* Disable strikethrough globally - prevents ~범위~ from being parsed as strikethrough */
+del,
+s,
 .prose del,
-.prose s {
+.prose s,
+article del,
+article s {
   text-decoration: none !important;
+  text-decoration-line: none !important;
 }

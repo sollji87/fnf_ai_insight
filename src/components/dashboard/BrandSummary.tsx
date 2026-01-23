@@ -618,7 +618,7 @@ ORDER BY total_sales DESC;`);
                       prose-li:text-gray-700
                       prose-strong:text-gray-900
                     ">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      <ReactMarkdown remarkPlugins={[[remarkGfm, { strikethrough: false }]]}>
                         {bi.insight}
                       </ReactMarkdown>
                     </article>
@@ -691,7 +691,7 @@ ORDER BY total_sales DESC;`);
                       prose-li:text-gray-700
                       prose-strong:text-gray-900
                     ">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      <ReactMarkdown remarkPlugins={[[remarkGfm, { strikethrough: false }]]}>
                         {summary.insight}
                       </ReactMarkdown>
                     </article>
