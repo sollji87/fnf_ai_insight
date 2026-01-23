@@ -20,6 +20,7 @@ import {
   Sparkles,
   RefreshCw,
   BookOpen,
+  Save,
 } from 'lucide-react';
 import { SAMPLE_BRANDS, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE } from '@/lib/prompts';
 import type { BrandInsight, InsightResponse, SavedInsight } from '@/types';
@@ -51,6 +52,10 @@ ORDER BY total_sales DESC;`);
   const [savedInsights, setSavedInsights] = useState<SavedInsight[]>([]);
   const [selectedInsights, setSelectedInsights] = useState<string[]>([]);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
+
+  // 요약 보고서 저장 관련 상태
+  const [isSavingReport, setIsSavingReport] = useState(false);
+  const [reportSaved, setReportSaved] = useState(false);
 
   // 저장된 인사이트 불러오기
   const fetchSavedInsights = async () => {
@@ -130,6 +135,56 @@ ORDER BY total_sales DESC;`);
 
     setCurrentStep(null);
     setIsGenerating(false);
+    setReportSaved(false); // 새 요약 생성 시 저장 상태 초기화
+  };
+
+  // 요약 보고서 저장
+  const saveSummaryReport = async () => {
+    if (!summary) return;
+
+    setIsSavingReport(true);
+    try {
+      // 제목 생성: 선택된 인사이트 또는 브랜드 기반
+      const titleParts = mode === 'saved'
+        ? savedInsights
+            .filter((i) => selectedInsights.includes(i.id))
+            .map((i) => i.brandName || i.title)
+            .slice(0, 3)
+        : selectedBrands.slice(0, 3);
+      
+      const titleSuffix = (mode === 'saved' ? selectedInsights.length : selectedBrands.length) > 3 
+        ? ` 외 ${(mode === 'saved' ? selectedInsights.length : selectedBrands.length) - 3}개` 
+        : '';
+      
+      const reportTitle = `[종합 요약] ${titleParts.join(', ')}${titleSuffix}`;
+
+      const response = await fetch('/api/saved-insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: reportTitle,
+          brandName: '종합 요약 보고서',
+          insight: summary.insight,
+          tokensUsed: summary.tokensUsed,
+          model: summary.model,
+          createdBy: '시스템',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setReportSaved(true);
+        // 저장된 인사이트 목록 새로고침
+        fetchSavedInsights();
+        // 3초 후 저장 완료 상태 초기화
+        setTimeout(() => setReportSaved(false), 3000);
+      }
+    } catch (error) {
+      console.error('요약 보고서 저장 실패:', error);
+    } finally {
+      setIsSavingReport(false);
+    }
   };
 
   useEffect(() => {
@@ -160,6 +215,7 @@ ORDER BY total_sales DESC;`);
     setIsGenerating(true);
     setBrandInsights([]);
     setSummary(null);
+    setReportSaved(false); // 새 분석 시작 시 저장 상태 초기화
 
     const insights: BrandInsight[] = [];
 
@@ -595,10 +651,40 @@ ORDER BY total_sales DESC;`);
 
                 {summary && (
                   <div className="rounded-xl bg-gray-50 border border-gray-200 p-5">
-                    <h3 className="text-lg font-bold text-gray-900 mb-3 pb-2 border-b border-gray-200 flex items-center gap-2">
-                      <Sparkles className="w-4 h-4" />
-                      {mode === 'saved' ? '저장된 인사이트 종합 요약' : '전체 브랜드 종합 요약'}
-                    </h3>
+                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-200">
+                      <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4" />
+                        {mode === 'saved' ? '저장된 인사이트 종합 요약' : '전체 브랜드 종합 요약'}
+                      </h3>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={saveSummaryReport}
+                        disabled={isSavingReport || reportSaved}
+                        className={`h-8 text-xs ${
+                          reportSaved 
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                            : 'hover:bg-gray-100'
+                        }`}
+                      >
+                        {isSavingReport ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                            저장 중...
+                          </>
+                        ) : reportSaved ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 mr-1.5 text-emerald-500" />
+                            저장됨
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-3.5 h-3.5 mr-1.5" />
+                            요약 보고서 저장
+                          </>
+                        )}
+                      </Button>
+                    </div>
                     <article className="prose prose-sm max-w-none
                       prose-headings:text-gray-900
                       prose-p:text-gray-700

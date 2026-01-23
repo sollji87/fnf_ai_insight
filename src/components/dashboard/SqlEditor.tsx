@@ -500,7 +500,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
 
       {/* Save Dialog */}
       {showSaveDialog && (
-        <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
           <div className="bg-white border border-gray-200 rounded-xl p-5 w-[380px] shadow-xl">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-semibold text-gray-900">쿼리 저장</h3>
@@ -573,7 +573,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorP
 
       {/* AI Query Helper Dialog */}
       {showAiHelper && (
-        <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
           <div className="bg-white border border-gray-200 rounded-xl p-5 w-[480px] max-h-[90vh] shadow-xl flex flex-col">
             <div className="flex items-center justify-between mb-4 flex-shrink-0">
               <div className="flex items-center gap-2">

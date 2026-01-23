@@ -59,7 +59,7 @@ export async function generateInsight(
 
   const response = await anthropic.messages.create({
     model,
-    max_tokens: 4096,
+    max_tokens: 8192,
     system: systemPrompt || SYSTEM_PROMPT,
     messages: [
       {

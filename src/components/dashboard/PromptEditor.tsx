@@ -18,6 +18,10 @@ interface PromptEditorProps {
 }
 
 const COMMON_PROMPT_KEY = 'fnf-common-prompt';
+const ANALYSIS_REQUEST_KEY = 'fnf-analysis-request';
+const USER_PROMPT_KEY = 'fnf-user-prompt';
+
+const DEFAULT_ANALYSIS_REQUEST = '전반적인 경영 현황을 분석해주세요.';
 
 const DEFAULT_COMMON_PROMPT = `<작성 가이드라인>
 ${COMMON_GUIDELINES}
@@ -40,18 +44,39 @@ export function PromptEditor({
   const [systemPrompt, setSystemPrompt] = useState(SYSTEM_PROMPT);
   const [userPrompt, setUserPrompt] = useState('');
   const [commonPrompt, setCommonPrompt] = useState(DEFAULT_COMMON_PROMPT);
-  const [analysisRequest, setAnalysisRequest] = useState('전반적인 경영 현황을 분석해주세요.');
+  const [analysisRequest, setAnalysisRequest] = useState(DEFAULT_ANALYSIS_REQUEST);
   const [error, setError] = useState<string | null>(null);
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const [showCommonPromptEditor, setShowCommonPromptEditor] = useState(false);
   const [tempCommonPrompt, setTempCommonPrompt] = useState('');
 
+  // localStorage에서 저장된 프롬프트 불러오기
   useEffect(() => {
-    const stored = localStorage.getItem(COMMON_PROMPT_KEY);
-    if (stored) {
-      setCommonPrompt(stored);
+    const storedCommonPrompt = localStorage.getItem(COMMON_PROMPT_KEY);
+    if (storedCommonPrompt) {
+      setCommonPrompt(storedCommonPrompt);
+    }
+    
+    const storedAnalysisRequest = localStorage.getItem(ANALYSIS_REQUEST_KEY);
+    if (storedAnalysisRequest) {
+      setAnalysisRequest(storedAnalysisRequest);
+    }
+    
+    const storedUserPrompt = localStorage.getItem(USER_PROMPT_KEY);
+    if (storedUserPrompt) {
+      setUserPrompt(storedUserPrompt);
     }
   }, []);
+
+  // 분석 요청사항 자동 저장
+  useEffect(() => {
+    localStorage.setItem(ANALYSIS_REQUEST_KEY, analysisRequest);
+  }, [analysisRequest]);
+
+  // 추가 요청사항 자동 저장
+  useEffect(() => {
+    localStorage.setItem(USER_PROMPT_KEY, userPrompt);
+  }, [userPrompt]);
 
   // Expose generateInsight function to parent
   useEffect(() => {
@@ -78,7 +103,10 @@ export function PromptEditor({
   const resetAll = () => {
     setSystemPrompt(SYSTEM_PROMPT);
     setUserPrompt('');
-    setAnalysisRequest('전반적인 경영 현황을 분석해주세요.');
+    setAnalysisRequest(DEFAULT_ANALYSIS_REQUEST);
+    // localStorage도 초기화
+    localStorage.removeItem(ANALYSIS_REQUEST_KEY);
+    localStorage.removeItem(USER_PROMPT_KEY);
   };
 
   const generateInsight = async () => {
