@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { SqlEditor } from '@/components/dashboard/SqlEditor';
 import { PromptEditor } from '@/components/dashboard/PromptEditor';
 import { DataPreview } from '@/components/dashboard/DataPreview';
@@ -18,7 +18,6 @@ interface RegionState {
   currentAnalysisRequest: string;
   insightResponse: InsightResponse | null;
   activeTab: 'data' | 'insight';
-  generateInsightFn: (() => Promise<void>) | null;
 }
 
 const initialRegionState: RegionState = {
@@ -27,7 +26,6 @@ const initialRegionState: RegionState = {
   currentAnalysisRequest: '',
   insightResponse: null,
   activeTab: 'data',
-  generateInsightFn: null,
 };
 
 export default function HomePage() {
@@ -42,18 +40,21 @@ export default function HomePage() {
   const [isQueryLoading, setIsQueryLoading] = useState(false);
   const [isInsightLoading, setIsInsightLoading] = useState(false);
   const [showBrandSummary, setShowBrandSummary] = useState(false);
+  
+  // generateInsightFn을 ref로 관리하여 무한 루프 방지
+  const generateInsightFnRef = useRef<(() => Promise<void>) | null>(null);
 
   // 현재 활성 지역의 상태 가져오기
   const currentState = activeRegion === 'domestic' ? domesticState : chinaState;
   const setCurrentState = activeRegion === 'domestic' ? setDomesticState : setChinaState;
 
   const handleGenerateReady = useCallback((fn: () => Promise<void>) => {
-    setCurrentState(prev => ({ ...prev, generateInsightFn: fn }));
-  }, [activeRegion]);
+    generateInsightFnRef.current = fn;
+  }, []);
 
   const handleGenerateClick = async () => {
-    if (currentState.generateInsightFn) {
-      await currentState.generateInsightFn();
+    if (generateInsightFnRef.current) {
+      await generateInsightFnRef.current();
     }
   };
 
