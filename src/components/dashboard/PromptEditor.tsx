@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -51,6 +51,19 @@ export function PromptEditor({
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const [showCommonPromptEditor, setShowCommonPromptEditor] = useState(false);
   const [tempCommonPrompt, setTempCommonPrompt] = useState('');
+  
+  // Refs to avoid infinite loops
+  const onAnalysisRequestChangeRef = useRef(onAnalysisRequestChange);
+  const onGenerateReadyRef = useRef(onGenerateReady);
+  
+  // Update refs when props change
+  useEffect(() => {
+    onAnalysisRequestChangeRef.current = onAnalysisRequestChange;
+  }, [onAnalysisRequestChange]);
+  
+  useEffect(() => {
+    onGenerateReadyRef.current = onGenerateReady;
+  }, [onGenerateReady]);
 
   // localStorage에서 저장된 프롬프트 불러오기
   useEffect(() => {
@@ -73,22 +86,15 @@ export function PromptEditor({
   // 분석 요청사항 자동 저장 및 부모에게 전달
   useEffect(() => {
     localStorage.setItem(ANALYSIS_REQUEST_KEY, analysisRequest);
-    if (onAnalysisRequestChange) {
-      onAnalysisRequestChange(analysisRequest);
+    if (onAnalysisRequestChangeRef.current) {
+      onAnalysisRequestChangeRef.current(analysisRequest);
     }
-  }, [analysisRequest, onAnalysisRequestChange]);
+  }, [analysisRequest]);
 
   // 추가 요청사항 자동 저장
   useEffect(() => {
     localStorage.setItem(USER_PROMPT_KEY, userPrompt);
   }, [userPrompt]);
-
-  // Expose generateInsight function to parent
-  useEffect(() => {
-    if (onGenerateReady) {
-      onGenerateReady(generateInsight);
-    }
-  }, [onGenerateReady, queryResult, systemPrompt, userPrompt, commonPrompt, analysisRequest]);
 
   const openCommonPromptEditor = () => {
     setTempCommonPrompt(commonPrompt);
@@ -114,7 +120,7 @@ export function PromptEditor({
     localStorage.removeItem(USER_PROMPT_KEY);
   };
 
-  const generateInsight = async () => {
+  const generateInsight = useCallback(async () => {
     if (!queryResult) {
       setError('먼저 SQL 쿼리를 실행해주세요.');
       return;
@@ -164,7 +170,14 @@ ${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [queryResult, currentQuery, systemPrompt, userPrompt, commonPrompt, analysisRequest, setIsLoading, onInsightGenerated]);
+
+  // Expose generateInsight function to parent
+  useEffect(() => {
+    if (onGenerateReadyRef.current) {
+      onGenerateReadyRef.current(generateInsight);
+    }
+  }, [generateInsight]);
 
   return (
     <div className="flex flex-col h-full rounded-xl bg-white border border-gray-200 overflow-hidden card-shadow relative">
