@@ -409,7 +409,7 @@ ORDER BY total_sales DESC;`);
 
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar */}
-          <div className="w-72 border-r border-gray-100 p-4 flex flex-col bg-gray-50/30">
+          <div className="w-80 border-r border-gray-100 p-4 flex flex-col bg-gray-50/30">
             {/* Mode Toggle */}
             <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-lg">
               <button
@@ -440,7 +440,7 @@ ORDER BY total_sales DESC;`);
               <>
                 {/* 국가 필터 탭 */}
                 <div className="flex gap-1 mb-3 bg-gray-100 p-1 rounded-lg">
-                  {AVAILABLE_REGIONS.filter(r => r.isDefault || savedInsights.some(i => i.region === r.id)).map((region) => (
+                  {AVAILABLE_REGIONS.map((region) => (
                     <button
                       key={region.id}
                       onClick={() => {

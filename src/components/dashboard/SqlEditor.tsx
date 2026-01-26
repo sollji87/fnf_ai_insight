@@ -32,16 +32,14 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { SAMPLE_QUERY_TEMPLATES } from '@/lib/prompts';
-import type { QueryResult, SavedQuery } from '@/types';
-
-type Region = 'domestic' | 'china';
+import { SAMPLE_QUERY_TEMPLATES, AVAILABLE_REGIONS } from '@/lib/prompts';
+import type { QueryResult, SavedQuery, RegionId } from '@/types';
 
 interface SqlEditorProps {
   onQueryResult: (result: QueryResult, query: string) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
-  region?: Region;
+  region?: RegionId;
 }
 
 export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'domestic' }: SqlEditorProps) {
@@ -52,7 +50,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
   const [newQueryName, setNewQueryName] = useState('');
   const [newQueryCreator, setNewQueryCreator] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<SavedQuery['category']>('custom');
-  const [selectedSaveRegion, setSelectedSaveRegion] = useState<Region>(region);
+  const [selectedSaveRegion, setSelectedSaveRegion] = useState<RegionId>(region || 'domestic');
   const [selectedQueryId, setSelectedQueryId] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -148,7 +146,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
         await fetchSavedQueries();
         setNewQueryName('');
         setNewQueryCreator('');
-        setSelectedSaveRegion(region);
+        setSelectedSaveRegion(region || 'domestic');
         setShowSaveDialog(false);
         setSelectedQueryId(data.query.id);
       } else {
@@ -574,17 +572,16 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
               </div>
               <div>
                 <label className="text-sm text-gray-600 mb-1.5 block">국가</label>
-                <Select value={selectedSaveRegion} onValueChange={(v) => setSelectedSaveRegion(v as Region)}>
+                <Select value={selectedSaveRegion} onValueChange={(v) => setSelectedSaveRegion(v as RegionId)}>
                   <SelectTrigger className="bg-white border-gray-200 text-gray-900">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-gray-200">
-                    <SelectItem value="domestic" className="text-gray-700">
-                      <span className="flex items-center gap-2">🇰🇷 국내</span>
-                    </SelectItem>
-                    <SelectItem value="china" className="text-gray-700">
-                      <span className="flex items-center gap-2">🇨🇳 중국</span>
-                    </SelectItem>
+                    {AVAILABLE_REGIONS.map((r) => (
+                      <SelectItem key={r.id} value={r.id} className="text-gray-700">
+                        <span className="flex items-center gap-2">{r.emoji} {r.name}</span>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
