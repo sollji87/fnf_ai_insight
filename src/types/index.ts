@@ -50,11 +50,26 @@ export interface PromptTemplate {
   userPromptTemplate: string;
 }
 
+// 지원하는 국가/지역 ID
+export type RegionId = 'domestic' | 'china' | 'hmt' | 'usa';
+
+// 기존 호환성을 위한 Region 타입 (RegionId의 별칭)
+export type Region = RegionId;
+
+// 국가/지역 설정 인터페이스
+export interface RegionConfig {
+  id: RegionId;
+  name: string;
+  emoji: string;
+  isDefault: boolean; // 기본 국가 여부 (삭제 불가)
+}
+
 export interface SavedQuery {
   id: string;
   name: string;
   query: string;
   category: 'sales' | 'profit' | 'discount' | 'brand' | 'inventory' | 'hr' | 'custom';
+  region: Region;
   createdAt: string;
   createdBy?: string;
 }
@@ -68,6 +83,7 @@ export interface SavedInsight {
   analysisRequest?: string;
   tokensUsed: number;
   model: string;
+  region?: RegionId; // 국가/지역 (없으면 'domestic'으로 간주)
   createdAt: string;
   createdBy?: string;
 }

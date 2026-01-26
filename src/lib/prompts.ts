@@ -57,6 +57,7 @@ export const SAMPLE_QUERY_TEMPLATES: Array<{
   category: 'sales' | 'profit' | 'discount' | 'brand' | 'custom';
 }> = [];
 
+// 브랜드 목록 - 신규 브랜드 추가 시 담당자가 여기에 직접 추가
 export const SAMPLE_BRANDS = [
   'MLB',
   'MLB KIDS',
@@ -65,3 +66,18 @@ export const SAMPLE_BRANDS = [
   'SERGIO TACCHINI',
   'SUPRA',
 ];
+
+// 사용 가능한 국가/지역 목록
+// - isDefault: true인 국가는 기본으로 표시되며 삭제 불가
+// - isDefault: false인 국가는 '+' 버튼으로 추가/삭제 가능
+import type { RegionConfig } from '@/types';
+
+export const AVAILABLE_REGIONS: RegionConfig[] = [
+  { id: 'domestic', name: '국내', emoji: '🇰🇷', isDefault: true },
+  { id: 'china', name: '중국', emoji: '🇨🇳', isDefault: true },
+  { id: 'hmt', name: '홍마대', emoji: '🇭🇰', isDefault: false },
+  { id: 'usa', name: '미국', emoji: '🇺🇸', isDefault: false },
+];
+
+// 기본 활성화 국가 ID 목록
+export const DEFAULT_ACTIVE_REGIONS: string[] = ['domestic', 'china'];

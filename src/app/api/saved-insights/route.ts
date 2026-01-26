@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
+import type { RegionId } from '@/types';
 
 const INSIGHTS_KEY = 'fnf-shared-insights';
 
@@ -26,8 +27,10 @@ interface SavedInsight {
   brandName?: string;
   insight: string;
   query?: string;
+  analysisRequest?: string;
   tokensUsed: number;
   model: string;
+  region?: RegionId; // 국가/지역 (없으면 'domestic'으로 간주)
   createdAt: string;
   createdBy?: string;
 }
@@ -45,10 +48,26 @@ export async function GET() {
       });
     }
     
-    const insights = await redis.get<SavedInsight[]>(INSIGHTS_KEY);
+    let insights = await redis.get<SavedInsight[]>(INSIGHTS_KEY) || [];
+    
+    // 기존 인사이트에 region이 없으면 'domestic'으로 마이그레이션
+    let needsMigration = false;
+    insights = insights.map(insight => {
+      if (!insight.region) {
+        needsMigration = true;
+        return { ...insight, region: 'domestic' as RegionId };
+      }
+      return insight;
+    });
+    
+    // 마이그레이션이 필요하면 저장
+    if (needsMigration) {
+      await redis.set(INSIGHTS_KEY, insights);
+    }
+    
     return NextResponse.json({
       success: true,
-      insights: insights || [],
+      insights,
     });
   } catch (error) {
     console.error('Redis Error:', error);
@@ -71,7 +90,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { title, brandName, insight, query, analysisRequest, tokensUsed, model, createdBy } = await request.json();
+    const { title, brandName, insight, query, analysisRequest, tokensUsed, model, region, createdBy } = await request.json();
 
     if (!title || !insight) {
       return NextResponse.json(
@@ -89,6 +108,7 @@ export async function POST(request: NextRequest) {
       analysisRequest: analysisRequest || undefined,
       tokensUsed: tokensUsed || 0,
       model: model || 'unknown',
+      region: region || 'domestic', // 국가 정보 (기본값: domestic)
       createdAt: new Date().toISOString(),
       createdBy: createdBy || '익명',
     };

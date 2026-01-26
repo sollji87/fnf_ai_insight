@@ -26,8 +26,8 @@ import {
   ChevronUp,
   Eye,
 } from 'lucide-react';
-import { SAMPLE_BRANDS, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE } from '@/lib/prompts';
-import type { BrandInsight, InsightResponse, SavedInsight } from '@/types';
+import { SAMPLE_BRANDS, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE, AVAILABLE_REGIONS } from '@/lib/prompts';
+import type { BrandInsight, InsightResponse, SavedInsight, RegionId } from '@/types';
 
 interface BrandSummaryProps {
   onClose: () => void;
@@ -56,6 +56,9 @@ ORDER BY total_sales DESC;`);
   const [savedInsights, setSavedInsights] = useState<SavedInsight[]>([]);
   const [selectedInsights, setSelectedInsights] = useState<string[]>([]);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
+  
+  // 국가 필터 상태
+  const [selectedRegion, setSelectedRegion] = useState<RegionId>('domestic');
 
   // 요약 보고서 저장 관련 상태
   const [isSavingReport, setIsSavingReport] = useState(false);
@@ -435,9 +438,35 @@ ORDER BY total_sales DESC;`);
 
             {mode === 'saved' ? (
               <>
+                {/* 국가 필터 탭 */}
+                <div className="flex gap-1 mb-3 bg-gray-100 p-1 rounded-lg">
+                  {AVAILABLE_REGIONS.filter(r => r.isDefault || savedInsights.some(i => i.region === r.id)).map((region) => (
+                    <button
+                      key={region.id}
+                      onClick={() => {
+                        setSelectedRegion(region.id);
+                        setSelectedInsights([]); // 국가 변경 시 선택 초기화
+                      }}
+                      className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1 ${
+                        selectedRegion === region.id
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <span>{region.emoji}</span>
+                      {region.name}
+                    </button>
+                  ))}
+                </div>
+
                 {/* 저장된 인사이트 모드 */}
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-gray-900">저장된 인사이트</h3>
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    저장된 인사이트
+                    <span className="ml-1.5 text-xs font-normal text-gray-500">
+                      ({savedInsights.filter(i => (i.region || 'domestic') === selectedRegion).length}개)
+                    </span>
+                  </h3>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -453,14 +482,14 @@ ORDER BY total_sales DESC;`);
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
                     </div>
-                  ) : savedInsights.length === 0 ? (
+                  ) : savedInsights.filter(i => (i.region || 'domestic') === selectedRegion).length === 0 ? (
                     <div className="text-center py-8">
                       <FileText className="w-8 h-8 mx-auto text-gray-300 mb-2" />
                       <p className="text-xs text-gray-500">저장된 인사이트가 없습니다</p>
                       <p className="text-xs text-gray-400 mt-1">AI 인사이트 생성 후 저장해주세요</p>
                     </div>
                   ) : (
-                    savedInsights.map((insight) => (
+                    savedInsights.filter(i => (i.region || 'domestic') === selectedRegion).map((insight) => (
                       <div
                         key={insight.id}
                         className="flex items-start gap-2 p-2.5 rounded-lg hover:bg-gray-100 transition-colors group"

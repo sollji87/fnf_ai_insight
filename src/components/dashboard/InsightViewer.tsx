@@ -5,16 +5,17 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { FileText, Copy, Download, Check, Clock, Coins, Cpu, Save, X } from 'lucide-react';
-import type { InsightResponse } from '@/types';
+import type { InsightResponse, RegionId } from '@/types';
 
 interface InsightViewerProps {
   insightResponse: InsightResponse | null;
   currentQuery?: string;
   brandName?: string;
   analysisRequest?: string;
+  region?: RegionId; // 현재 선택된 국가
 }
 
-export function InsightViewer({ insightResponse, currentQuery, brandName, analysisRequest }: InsightViewerProps) {
+export function InsightViewer({ insightResponse, currentQuery, brandName, analysisRequest, region = 'domestic' }: InsightViewerProps) {
   const [copied, setCopied] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveTitle, setSaveTitle] = useState('');
@@ -61,6 +62,7 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
           analysisRequest: analysisRequest,
           tokensUsed: insightResponse.tokensUsed,
           model: insightResponse.model,
+          region: region, // 국가 정보 포함
           createdBy: createdBy.trim() || '익명',
         }),
       });

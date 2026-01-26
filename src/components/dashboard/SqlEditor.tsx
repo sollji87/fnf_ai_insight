@@ -52,6 +52,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
   const [newQueryName, setNewQueryName] = useState('');
   const [newQueryCreator, setNewQueryCreator] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<SavedQuery['category']>('custom');
+  const [selectedSaveRegion, setSelectedSaveRegion] = useState<Region>(region);
   const [selectedQueryId, setSelectedQueryId] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -136,6 +137,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
           name: newQueryName.trim(),
           query: query,
           category: selectedCategory,
+          region: selectedSaveRegion,
           createdBy: newQueryCreator.trim() || '익명',
         }),
       });
@@ -146,6 +148,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
         await fetchSavedQueries();
         setNewQueryName('');
         setNewQueryCreator('');
+        setSelectedSaveRegion(region);
         setShowSaveDialog(false);
         setSelectedQueryId(data.query.id);
       } else {
@@ -402,11 +405,13 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
               <SelectValue placeholder="쿼리 선택">{getSelectedLabel()}</SelectValue>
             </SelectTrigger>
             <SelectContent className="bg-white border-gray-200 max-h-[400px]">
-              {savedQueries.length > 0 && (
+              {savedQueries.filter(q => q.region === region || !q.region).length > 0 && (
                 <>
                   <SelectGroup>
-                    <SelectLabel className="text-xs text-gray-500 font-medium">저장된 쿼리</SelectLabel>
-                    {savedQueries.map((saved) => (
+                    <SelectLabel className="text-xs text-gray-500 font-medium">
+                      저장된 쿼리 ({region === 'domestic' ? '🇰🇷 국내' : '🇨🇳 중국'})
+                    </SelectLabel>
+                    {savedQueries.filter(q => q.region === region || !q.region).map((saved) => (
                       <div key={saved.id} className="relative group">
                         <SelectItem
                           value={saved.id}
@@ -450,7 +455,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
                   ))}
                 </SelectGroup>
               )}
-              {savedQueries.length === 0 && SAMPLE_QUERY_TEMPLATES.length === 0 && (
+              {savedQueries.filter(q => q.region === region || !q.region).length === 0 && SAMPLE_QUERY_TEMPLATES.length === 0 && (
                 <div className="px-3 py-2 text-xs text-gray-400 text-center">
                   저장된 쿼리가 없습니다
                 </div>
@@ -566,6 +571,22 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
                   placeholder="예: 홍길동 (선택사항)"
                   className="bg-white border-gray-200 text-gray-900"
                 />
+              </div>
+              <div>
+                <label className="text-sm text-gray-600 mb-1.5 block">국가</label>
+                <Select value={selectedSaveRegion} onValueChange={(v) => setSelectedSaveRegion(v as Region)}>
+                  <SelectTrigger className="bg-white border-gray-200 text-gray-900">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-gray-200">
+                    <SelectItem value="domestic" className="text-gray-700">
+                      <span className="flex items-center gap-2">🇰🇷 국내</span>
+                    </SelectItem>
+                    <SelectItem value="china" className="text-gray-700">
+                      <span className="flex items-center gap-2">🇨🇳 중국</span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="text-sm text-gray-600 mb-1.5 block">카테고리</label>

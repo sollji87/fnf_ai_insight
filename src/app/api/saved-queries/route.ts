@@ -29,11 +29,14 @@ const getRedis = () => {
   return new Redis({ url, token });
 };
 
+type Region = 'domestic' | 'china';
+
 interface SavedQuery {
   id: string;
   name: string;
   query: string;
   category: 'sales' | 'profit' | 'discount' | 'brand' | 'inventory' | 'hr' | 'custom';
+  region: Region;
   createdAt: string;
   createdBy?: string;
 }
@@ -51,10 +54,26 @@ export async function GET() {
       });
     }
     
-    const queries = await redis.get<SavedQuery[]>(QUERIES_KEY);
+    let queries = await redis.get<SavedQuery[]>(QUERIES_KEY) || [];
+    
+    // 기존 쿼리에 region이 없으면 'domestic'으로 마이그레이션
+    let needsMigration = false;
+    queries = queries.map(q => {
+      if (!q.region) {
+        needsMigration = true;
+        return { ...q, region: 'domestic' as Region };
+      }
+      return q;
+    });
+    
+    // 마이그레이션이 필요하면 저장
+    if (needsMigration) {
+      await redis.set(QUERIES_KEY, queries);
+    }
+    
     return NextResponse.json({
       success: true,
-      queries: queries || [],
+      queries,
     });
   } catch (error) {
     console.error('Redis Error:', error);
@@ -77,7 +96,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, query, category, createdBy } = await request.json();
+    const { name, query, category, createdBy, region } = await request.json();
 
     if (!name || !query) {
       return NextResponse.json(
@@ -91,6 +110,7 @@ export async function POST(request: NextRequest) {
       name,
       query,
       category: category || 'custom',
+      region: region || 'domestic',
       createdAt: new Date().toISOString(),
       createdBy: createdBy || '익명',
     };
