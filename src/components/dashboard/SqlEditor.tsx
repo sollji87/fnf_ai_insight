@@ -35,13 +35,16 @@ import {
 import { SAMPLE_QUERY_TEMPLATES } from '@/lib/prompts';
 import type { QueryResult, SavedQuery } from '@/types';
 
+type Region = 'domestic' | 'china';
+
 interface SqlEditorProps {
   onQueryResult: (result: QueryResult, query: string) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
+  region?: Region;
 }
 
-export function SqlEditor({ onQueryResult, isLoading, setIsLoading }: SqlEditorProps) {
+export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'domestic' }: SqlEditorProps) {
   const [query, setQuery] = useState('-- SQL 쿼리를 입력하세요\nSELECT * FROM ');
   const [error, setError] = useState<string | null>(null);
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
