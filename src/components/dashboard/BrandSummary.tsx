@@ -741,7 +741,7 @@ ORDER BY total_sales DESC;`);
                       <input
                         type="file"
                         multiple
-                        accept=".xlsx,.xls,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp"
+                        accept=".xlsx,.xls,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp,.pdf"
                         onChange={handleFileUpload}
                         className="hidden"
                         disabled={isUploadingFiles}
@@ -788,7 +788,7 @@ ORDER BY total_sales DESC;`);
                   )}
                   
                   <p className="text-[10px] text-gray-400">
-                    엑셀(.xlsx), 이미지(.png, .jpg), 텍스트(.txt, .csv) 지원
+                    엑셀(.xlsx), PDF(.pdf), 이미지(.png, .jpg), 텍스트(.txt, .csv) 지원
                   </p>
                 </div>
 

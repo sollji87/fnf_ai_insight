@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
+import pdfParse from 'pdf-parse';
 
 export const runtime = 'nodejs';
 
@@ -64,6 +65,28 @@ function parseTextFile(buffer: ArrayBuffer, fileName: string): string {
   return `# 텍스트 파일: ${fileName}\n\n${text}`;
 }
 
+// PDF 파일 파싱
+async function parsePdfFile(buffer: ArrayBuffer, fileName: string): Promise<string> {
+  try {
+    const data = await pdfParse(Buffer.from(buffer));
+    const text = data.text.trim();
+    
+    if (!text) {
+      return `# PDF 파일: ${fileName}\n\n(텍스트를 추출할 수 없습니다. 스캔된 PDF일 수 있습니다.)`;
+    }
+    
+    // 너무 긴 경우 잘라내기 (약 50000자)
+    const truncatedText = text.length > 50000 
+      ? text.slice(0, 50000) + `\n\n... (총 ${text.length}자 중 50000자만 표시)`
+      : text;
+    
+    return `# PDF 파일: ${fileName}\n\n${truncatedText}`;
+  } catch (error) {
+    console.error('PDF parsing error:', error);
+    throw new Error(`PDF 파일 파싱에 실패했습니다: ${fileName}`);
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -123,12 +146,13 @@ export async function POST(request: NextRequest) {
           preview: content.slice(0, 200) + '...',
         });
       } else if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) {
-        // PDF 파일 - 기본 안내 메시지 (PDF 파싱은 추가 라이브러리 필요)
+        // PDF 파일
+        const content = await parsePdfFile(buffer, fileName);
         processedFiles.push({
           name: fileName,
           type: 'pdf',
-          content: `[PDF 파일: ${fileName}] - PDF 텍스트 추출은 현재 지원되지 않습니다. 이미지로 변환하여 업로드해주세요.`,
-          preview: `[PDF: ${fileName}]`,
+          content,
+          preview: content.slice(0, 200) + '...',
         });
       } else {
         // 지원하지 않는 파일 형식
