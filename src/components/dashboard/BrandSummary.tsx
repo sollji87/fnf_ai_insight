@@ -25,6 +25,7 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
+  FileDown,
 } from 'lucide-react';
 import { SAMPLE_BRANDS, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE, AVAILABLE_REGIONS } from '@/lib/prompts';
 import type { BrandInsight, InsightResponse, SavedInsight, RegionId } from '@/types';
@@ -78,6 +79,9 @@ ORDER BY total_sales DESC;`);
   // 인사이트 상세보기 상태
   const [viewingInsight, setViewingInsight] = useState<SavedInsight | null>(null);
   const [isQueryCollapsed, setIsQueryCollapsed] = useState(true);
+
+  // PDF 내보내기 상태
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   // 저장된 인사이트 불러오기
   const fetchSavedInsights = async () => {
@@ -350,6 +354,141 @@ ORDER BY total_sales DESC;`);
     URL.revokeObjectURL(url);
   };
 
+  // PDF 내보내기 함수
+  const exportToPdf = async () => {
+    if (selectedInsights.length === 0) return;
+
+    setIsExportingPdf(true);
+
+    try {
+      // 동적 임포트 (클라이언트 사이드에서만 로드)
+      const html2pdf = (await import('html2pdf.js')).default;
+      
+      // 선택된 인사이트 데이터 가져오기
+      const selectedData = savedInsights.filter((i) => selectedInsights.includes(i.id));
+      
+      // PDF용 HTML 컨테이너 생성
+      const container = document.createElement('div');
+      container.style.cssText = `
+        font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        padding: 40px;
+        background: white;
+        color: #1a1a1a;
+        max-width: 800px;
+        margin: 0 auto;
+      `;
+
+      // 헤더 추가
+      const header = document.createElement('div');
+      header.innerHTML = `
+        <div style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #e5e5e5;">
+          <h1 style="font-size: 24px; font-weight: 700; margin: 0 0 8px 0; color: #111;">
+            인사이트 분석 보고서
+          </h1>
+          <p style="font-size: 12px; color: #666; margin: 0;">
+            생성일: ${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })} | 
+            총 ${selectedData.length}개 인사이트
+          </p>
+        </div>
+      `;
+      container.appendChild(header);
+
+      // 목차 추가
+      const toc = document.createElement('div');
+      toc.innerHTML = `
+        <div style="margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+          <h2 style="font-size: 14px; font-weight: 600; margin: 0 0 12px 0; color: #333;">목차</h2>
+          <ul style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.8; color: #555;">
+            ${selectedData.map((insight, index) => `
+              <li>${index + 1}. ${insight.title}${insight.brandName ? ` (${insight.brandName})` : ''}</li>
+            `).join('')}
+          </ul>
+        </div>
+      `;
+      container.appendChild(toc);
+
+      // 각 인사이트 내용 추가
+      selectedData.forEach((insight, index) => {
+        const section = document.createElement('div');
+        section.style.cssText = `
+          margin-bottom: 40px;
+          page-break-inside: avoid;
+        `;
+
+        // 마크다운을 HTML로 간단 변환 (기본적인 형식만)
+        const processedInsight = insight.insight
+          .replace(/^### (.*?)$/gm, '<h3 style="font-size: 14px; font-weight: 600; margin: 16px 0 8px 0; color: #333;">$1</h3>')
+          .replace(/^## (.*?)$/gm, '<h2 style="font-size: 16px; font-weight: 600; margin: 20px 0 10px 0; color: #222;">$1</h2>')
+          .replace(/^# (.*?)$/gm, '<h1 style="font-size: 18px; font-weight: 700; margin: 24px 0 12px 0; color: #111;">$1</h1>')
+          .replace(/\*\*(.*?)\*\*/g, '<strong style="font-weight: 600;">$1</strong>')
+          .replace(/\*(.*?)\*/g, '<em>$1</em>')
+          .replace(/^- (.*?)$/gm, '<li style="margin-left: 20px; margin-bottom: 4px;">$1</li>')
+          .replace(/^\d+\. (.*?)$/gm, '<li style="margin-left: 20px; margin-bottom: 4px;">$1</li>')
+          .replace(/\n\n/g, '</p><p style="margin: 12px 0; line-height: 1.7;">')
+          .replace(/\n/g, '<br/>');
+
+        section.innerHTML = `
+          <div style="border: 1px solid #e5e5e5; border-radius: 12px; overflow: hidden;">
+            <div style="background: #f8f9fa; padding: 16px 20px; border-bottom: 1px solid #e5e5e5;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="background: #111; color: white; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px;">
+                  ${index + 1}
+                </span>
+                <h2 style="font-size: 16px; font-weight: 600; margin: 0; color: #111;">${insight.title}</h2>
+              </div>
+              <div style="margin-top: 8px; display: flex; gap: 12px; font-size: 11px; color: #666;">
+                ${insight.brandName ? `<span style="background: #e5e5e5; padding: 2px 8px; border-radius: 4px;">${insight.brandName}</span>` : ''}
+                <span>${new Date(insight.createdAt).toLocaleDateString('ko-KR')}</span>
+                <span>작성자: ${insight.createdBy || '익명'}</span>
+              </div>
+            </div>
+            <div style="padding: 20px; font-size: 13px; color: #333; line-height: 1.7;">
+              <p style="margin: 0;">${processedInsight}</p>
+            </div>
+          </div>
+        `;
+        container.appendChild(section);
+      });
+
+      // 푸터 추가
+      const footer = document.createElement('div');
+      footer.innerHTML = `
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e5e5; text-align: center;">
+          <p style="font-size: 10px; color: #999; margin: 0;">
+            본 보고서는 AI 분석 시스템에 의해 자동 생성되었습니다.
+          </p>
+        </div>
+      `;
+      container.appendChild(footer);
+
+      // PDF 옵션 설정
+      const options = {
+        margin: [10, 10, 10, 10],
+        filename: `인사이트-보고서-${new Date().toISOString().slice(0, 10)}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true,
+          letterRendering: true,
+        },
+        jsPDF: { 
+          unit: 'mm', 
+          format: 'a4', 
+          orientation: 'portrait',
+        },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+      };
+
+      // PDF 생성 및 다운로드
+      await html2pdf().set(options).from(container).save();
+
+    } catch (error) {
+      console.error('PDF 내보내기 실패:', error);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-6">
       <div className="w-full max-w-5xl h-[85vh] rounded-xl bg-white border border-gray-200 flex flex-col overflow-hidden shadow-xl">
@@ -567,23 +706,38 @@ ORDER BY total_sales DESC;`);
                   )}
                 </div>
 
-                <Button
-                  onClick={generateSummaryFromSaved}
-                  disabled={isGenerating || selectedInsights.length === 0}
-                  className="w-full bg-gray-900 hover:bg-gray-800 text-white"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      {currentStep || '요약 생성 중...'}
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 mr-2" />
-                      {selectedInsights.length}개 인사이트 요약
-                    </>
-                  )}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={generateSummaryFromSaved}
+                    disabled={isGenerating || selectedInsights.length === 0}
+                    className="flex-1 bg-gray-900 hover:bg-gray-800 text-white"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        {currentStep || '요약 생성 중...'}
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        {selectedInsights.length}개 요약
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={exportToPdf}
+                    disabled={isExportingPdf || selectedInsights.length === 0}
+                    variant="outline"
+                    className="border-gray-300 text-gray-700 hover:bg-gray-100"
+                    title="선택한 인사이트를 PDF로 내보내기"
+                  >
+                    {isExportingPdf ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <FileDown className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
               </>
             ) : (
               <>
