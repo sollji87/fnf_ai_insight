@@ -79,6 +79,7 @@ ORDER BY total_sales DESC;`);
   // 인사이트 상세보기 상태
   const [viewingInsight, setViewingInsight] = useState<SavedInsight | null>(null);
   const [isQueryCollapsed, setIsQueryCollapsed] = useState(true);
+  const [isPromptCollapsed, setIsPromptCollapsed] = useState(true);
 
   // PDF 내보내기 상태
   const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -987,13 +988,40 @@ ORDER BY total_sales DESC;`);
               {/* 분석 요청 프롬프트 */}
               {viewingInsight.analysisRequest && (
                 <div className="border-t border-gray-200 pt-4">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-purple-500" />
-                    분석 요청 프롬프트
-                  </h4>
-                  <div className="bg-purple-50 border border-purple-100 rounded-lg p-3">
-                    <p className="text-sm text-purple-900 whitespace-pre-wrap">{viewingInsight.analysisRequest}</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                      분석 요청 프롬프트
+                    </h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsPromptCollapsed(!isPromptCollapsed)}
+                      className="h-6 text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      {isPromptCollapsed ? (
+                        <>
+                          <ChevronDown className="w-3 h-3 mr-1" />
+                          펼치기
+                        </>
+                      ) : (
+                        <>
+                          <ChevronUp className="w-3 h-3 mr-1" />
+                          접기
+                        </>
+                      )}
+                    </Button>
                   </div>
+                  {!isPromptCollapsed && (
+                    <div className="bg-purple-50 border border-purple-100 rounded-lg p-3">
+                      <p className="text-sm text-purple-900 whitespace-pre-wrap">{viewingInsight.analysisRequest}</p>
+                    </div>
+                  )}
+                  {isPromptCollapsed && (
+                    <div className="bg-purple-50 border border-purple-100 rounded-lg p-2">
+                      <p className="text-xs text-purple-600 truncate">{viewingInsight.analysisRequest.split('\n')[0]}...</p>
+                    </div>
+                  )}
                 </div>
               )}
 
