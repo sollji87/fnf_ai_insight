@@ -354,154 +354,127 @@ ORDER BY total_sales DESC;`);
     URL.revokeObjectURL(url);
   };
 
-  // PDF 내보내기 함수
-  const exportToPdf = async () => {
+  // PDF 내보내기 함수 (브라우저 인쇄 기능 사용)
+  const exportToPdf = () => {
     if (selectedInsights.length === 0) return;
 
     setIsExportingPdf(true);
-    let container: HTMLDivElement | null = null;
 
     try {
-      // 동적 임포트 (클라이언트 사이드에서만 로드)
-      const html2pdf = (await import('html2pdf.js')).default;
-      
       // 선택된 인사이트 데이터 가져오기
       const selectedData = savedInsights.filter((i) => selectedInsights.includes(i.id));
       
-      // PDF용 HTML 컨테이너 생성 (DOM에 추가해야 html2canvas가 캡처 가능)
-      container = document.createElement('div');
-      container.id = 'pdf-export-container';
-      container.style.cssText = `
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 800px;
-        min-height: 100px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        padding: 40px;
-        background: white;
-        color: #1a1a1a;
-        box-sizing: border-box;
-        z-index: -9999;
-        opacity: 0;
-        pointer-events: none;
-      `;
-      document.body.appendChild(container);
-
-      // 헤더 추가
-      const header = document.createElement('div');
-      header.innerHTML = `
-        <div style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #e5e5e5;">
-          <h1 style="font-size: 24px; font-weight: 700; margin: 0 0 8px 0; color: #111;">
-            인사이트 분석 보고서
-          </h1>
-          <p style="font-size: 12px; color: #666; margin: 0;">
-            생성일: ${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })} | 
-            총 ${selectedData.length}개 인사이트
-          </p>
-        </div>
-      `;
-      container.appendChild(header);
-
-      // 목차 추가
-      const toc = document.createElement('div');
-      toc.innerHTML = `
-        <div style="margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
-          <h2 style="font-size: 14px; font-weight: 600; margin: 0 0 12px 0; color: #333;">목차</h2>
-          <ul style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.8; color: #555;">
-            ${selectedData.map((insight, index) => `
-              <li>${index + 1}. ${insight.title}${insight.brandName ? ` (${insight.brandName})` : ''}</li>
-            `).join('')}
-          </ul>
-        </div>
-      `;
-      container.appendChild(toc);
-
-      // 각 인사이트 내용 추가
-      selectedData.forEach((insight, index) => {
-        const section = document.createElement('div');
-        section.style.cssText = `
-          margin-bottom: 40px;
-          page-break-inside: avoid;
-        `;
-
-        // 마크다운을 HTML로 간단 변환 (기본적인 형식만)
-        const processedInsight = insight.insight
+      // 마크다운을 HTML로 변환하는 함수
+      const processMarkdown = (text: string) => {
+        return text
           .replace(/^### (.*?)$/gm, '<h3 style="font-size: 14px; font-weight: 600; margin: 16px 0 8px 0; color: #333;">$1</h3>')
           .replace(/^## (.*?)$/gm, '<h2 style="font-size: 16px; font-weight: 600; margin: 20px 0 10px 0; color: #222;">$1</h2>')
           .replace(/^# (.*?)$/gm, '<h1 style="font-size: 18px; font-weight: 700; margin: 24px 0 12px 0; color: #111;">$1</h1>')
-          .replace(/\*\*(.*?)\*\*/g, '<strong style="font-weight: 600;">$1</strong>')
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
           .replace(/\*(.*?)\*/g, '<em>$1</em>')
           .replace(/^- (.*?)$/gm, '<li style="margin-left: 20px; margin-bottom: 4px;">$1</li>')
           .replace(/^\d+\. (.*?)$/gm, '<li style="margin-left: 20px; margin-bottom: 4px;">$1</li>')
           .replace(/\n\n/g, '</p><p style="margin: 12px 0; line-height: 1.7;">')
           .replace(/\n/g, '<br/>');
-
-        section.innerHTML = `
-          <div style="border: 1px solid #e5e5e5; border-radius: 12px; overflow: hidden;">
-            <div style="background: #f8f9fa; padding: 16px 20px; border-bottom: 1px solid #e5e5e5;">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="background: #111; color: white; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px;">
-                  ${index + 1}
-                </span>
-                <h2 style="font-size: 16px; font-weight: 600; margin: 0; color: #111;">${insight.title}</h2>
-              </div>
-              <div style="margin-top: 8px; font-size: 11px; color: #666;">
-                ${insight.brandName ? `<span style="background: #e5e5e5; padding: 2px 8px; border-radius: 4px; margin-right: 8px;">${insight.brandName}</span>` : ''}
-                <span>${new Date(insight.createdAt).toLocaleDateString('ko-KR')}</span>
-                <span style="margin-left: 8px;">작성자: ${insight.createdBy || '익명'}</span>
-              </div>
-            </div>
-            <div style="padding: 20px; font-size: 13px; color: #333; line-height: 1.7;">
-              <p style="margin: 0;">${processedInsight}</p>
-            </div>
-          </div>
-        `;
-        container!.appendChild(section);
-      });
-
-      // 푸터 추가
-      const footer = document.createElement('div');
-      footer.innerHTML = `
-        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e5e5; text-align: center;">
-          <p style="font-size: 10px; color: #999; margin: 0;">
-            본 보고서는 AI 분석 시스템에 의해 자동 생성되었습니다.
-          </p>
-        </div>
-      `;
-      container.appendChild(footer);
-
-      // DOM 렌더링 대기
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      // PDF 옵션 설정
-      const options = {
-        margin: 10,
-        filename: `인사이트-보고서-${new Date().toISOString().slice(0, 10)}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff',
-        },
-        jsPDF: { 
-          unit: 'mm', 
-          format: 'a4', 
-          orientation: 'portrait' as const,
-        },
       };
 
-      // PDF 생성 및 다운로드
-      await html2pdf().set(options).from(container).save();
+      // 인사이트 섹션 HTML 생성
+      const insightSections = selectedData.map((insight, index) => `
+        <div style="margin-bottom: 30px; page-break-inside: avoid; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+          <div style="background: #f5f5f5; padding: 12px 16px; border-bottom: 1px solid #ddd;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="background: #333; color: white; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px;">
+                ${index + 1}
+              </span>
+              <strong style="font-size: 15px; color: #111;">${insight.title}</strong>
+            </div>
+            <div style="margin-top: 6px; font-size: 11px; color: #666;">
+              ${insight.brandName ? `<span style="background: #e0e0e0; padding: 2px 6px; border-radius: 4px; margin-right: 8px;">${insight.brandName}</span>` : ''}
+              <span>${new Date(insight.createdAt).toLocaleDateString('ko-KR')}</span>
+              <span style="margin-left: 8px;">작성자: ${insight.createdBy || '익명'}</span>
+            </div>
+          </div>
+          <div style="padding: 16px; font-size: 13px; color: #333; line-height: 1.7;">
+            <p style="margin: 0;">${processMarkdown(insight.insight)}</p>
+          </div>
+        </div>
+      `).join('');
+
+      // 전체 HTML 문서 생성
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>인사이트 분석 보고서</title>
+          <style>
+            @media print {
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              @page { margin: 15mm; }
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Malgun Gothic', '맑은 고딕', sans-serif;
+              padding: 20px;
+              max-width: 800px;
+              margin: 0 auto;
+              color: #1a1a1a;
+              background: white;
+            }
+            table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
+            th { background: #f5f5f5; }
+          </style>
+        </head>
+        <body>
+          <div style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #e0e0e0;">
+            <h1 style="font-size: 22px; font-weight: 700; margin: 0 0 8px 0; color: #111;">
+              인사이트 분석 보고서
+            </h1>
+            <p style="font-size: 12px; color: #666; margin: 0;">
+              생성일: ${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })} | 
+              총 ${selectedData.length}개 인사이트
+            </p>
+          </div>
+
+          <div style="margin-bottom: 30px; padding: 16px; background: #f9f9f9; border-radius: 8px;">
+            <h2 style="font-size: 14px; font-weight: 600; margin: 0 0 12px 0; color: #333;">목차</h2>
+            <ul style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.8; color: #555;">
+              ${selectedData.map((insight, index) => `
+                <li>${index + 1}. ${insight.title}${insight.brandName ? ` (${insight.brandName})` : ''}</li>
+              `).join('')}
+            </ul>
+          </div>
+
+          ${insightSections}
+
+          <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center;">
+            <p style="font-size: 10px; color: #999; margin: 0;">
+              본 보고서는 AI 분석 시스템에 의해 자동 생성되었습니다.
+            </p>
+          </div>
+        </body>
+        </html>
+      `;
+
+      // 새 창에서 인쇄
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+        
+        // 로딩 완료 후 인쇄 다이얼로그 열기
+        printWindow.onload = () => {
+          setTimeout(() => {
+            printWindow.print();
+          }, 250);
+        };
+      } else {
+        alert('팝업이 차단되었습니다. 팝업 차단을 해제해주세요.');
+      }
     } catch (error) {
       console.error('PDF 내보내기 실패:', error);
       alert('PDF 내보내기에 실패했습니다. 다시 시도해주세요.');
     } finally {
-      // 컨테이너 정리
-      if (container && container.parentNode) {
-        container.parentNode.removeChild(container);
-      }
       setIsExportingPdf(false);
     }
   };
