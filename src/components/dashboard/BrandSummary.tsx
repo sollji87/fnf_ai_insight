@@ -359,6 +359,7 @@ ORDER BY total_sales DESC;`);
     if (selectedInsights.length === 0) return;
 
     setIsExportingPdf(true);
+    let container: HTMLDivElement | null = null;
 
     try {
       // 동적 임포트 (클라이언트 사이드에서만 로드)
@@ -368,17 +369,22 @@ ORDER BY total_sales DESC;`);
       const selectedData = savedInsights.filter((i) => selectedInsights.includes(i.id));
       
       // PDF용 HTML 컨테이너 생성 (DOM에 추가해야 html2canvas가 캡처 가능)
-      const container = document.createElement('div');
+      container = document.createElement('div');
+      container.id = 'pdf-export-container';
       container.style.cssText = `
-        position: fixed;
-        left: -9999px;
+        position: absolute;
+        left: 0;
         top: 0;
         width: 800px;
-        font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        min-height: 100px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         padding: 40px;
         background: white;
         color: #1a1a1a;
         box-sizing: border-box;
+        z-index: -9999;
+        opacity: 0;
+        pointer-events: none;
       `;
       document.body.appendChild(container);
 
@@ -440,10 +446,10 @@ ORDER BY total_sales DESC;`);
                 </span>
                 <h2 style="font-size: 16px; font-weight: 600; margin: 0; color: #111;">${insight.title}</h2>
               </div>
-              <div style="margin-top: 8px; display: flex; gap: 12px; font-size: 11px; color: #666;">
-                ${insight.brandName ? `<span style="background: #e5e5e5; padding: 2px 8px; border-radius: 4px;">${insight.brandName}</span>` : ''}
+              <div style="margin-top: 8px; font-size: 11px; color: #666;">
+                ${insight.brandName ? `<span style="background: #e5e5e5; padding: 2px 8px; border-radius: 4px; margin-right: 8px;">${insight.brandName}</span>` : ''}
                 <span>${new Date(insight.createdAt).toLocaleDateString('ko-KR')}</span>
-                <span>작성자: ${insight.createdBy || '익명'}</span>
+                <span style="margin-left: 8px;">작성자: ${insight.createdBy || '익명'}</span>
               </div>
             </div>
             <div style="padding: 20px; font-size: 13px; color: #333; line-height: 1.7;">
@@ -451,7 +457,7 @@ ORDER BY total_sales DESC;`);
             </div>
           </div>
         `;
-        container.appendChild(section);
+        container!.appendChild(section);
       });
 
       // 푸터 추가
@@ -465,34 +471,37 @@ ORDER BY total_sales DESC;`);
       `;
       container.appendChild(footer);
 
+      // DOM 렌더링 대기
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
       // PDF 옵션 설정
       const options = {
-        margin: [10, 10, 10, 10],
+        margin: 10,
         filename: `인사이트-보고서-${new Date().toISOString().slice(0, 10)}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { 
           scale: 2, 
           useCORS: true,
-          letterRendering: true,
           logging: false,
+          backgroundColor: '#ffffff',
         },
         jsPDF: { 
           unit: 'mm', 
           format: 'a4', 
-          orientation: 'portrait',
+          orientation: 'portrait' as const,
         },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
       };
-
-      // DOM 렌더링 대기 후 PDF 생성
-      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // PDF 생성 및 다운로드
       await html2pdf().set(options).from(container).save();
     } catch (error) {
       console.error('PDF 내보내기 실패:', error);
+      alert('PDF 내보내기에 실패했습니다. 다시 시도해주세요.');
     } finally {
-      container.parentNode?.removeChild(container);
+      // 컨테이너 정리
+      if (container && container.parentNode) {
+        container.parentNode.removeChild(container);
+      }
       setIsExportingPdf(false);
     }
   };
