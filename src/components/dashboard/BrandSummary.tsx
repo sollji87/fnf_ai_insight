@@ -367,16 +367,20 @@ ORDER BY total_sales DESC;`);
       // 선택된 인사이트 데이터 가져오기
       const selectedData = savedInsights.filter((i) => selectedInsights.includes(i.id));
       
-      // PDF용 HTML 컨테이너 생성
+      // PDF용 HTML 컨테이너 생성 (DOM에 추가해야 html2canvas가 캡처 가능)
       const container = document.createElement('div');
       container.style.cssText = `
+        position: fixed;
+        left: -9999px;
+        top: 0;
+        width: 800px;
         font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         padding: 40px;
         background: white;
         color: #1a1a1a;
-        max-width: 800px;
-        margin: 0 auto;
+        box-sizing: border-box;
       `;
+      document.body.appendChild(container);
 
       // 헤더 추가
       const header = document.createElement('div');
@@ -470,6 +474,7 @@ ORDER BY total_sales DESC;`);
           scale: 2, 
           useCORS: true,
           letterRendering: true,
+          logging: false,
         },
         jsPDF: { 
           unit: 'mm', 
@@ -479,12 +484,15 @@ ORDER BY total_sales DESC;`);
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
       };
 
+      // DOM 렌더링 대기 후 PDF 생성
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       // PDF 생성 및 다운로드
       await html2pdf().set(options).from(container).save();
-
     } catch (error) {
       console.error('PDF 내보내기 실패:', error);
     } finally {
+      container.parentNode?.removeChild(container);
       setIsExportingPdf(false);
     }
   };
