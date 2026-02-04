@@ -26,6 +26,7 @@ import {
   ChevronUp,
   Eye,
   FileDown,
+  Pencil,
 } from 'lucide-react';
 import { SAMPLE_BRANDS, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE, AVAILABLE_REGIONS } from '@/lib/prompts';
 import type { BrandInsight, InsightResponse, SavedInsight, RegionId } from '@/types';
@@ -80,6 +81,10 @@ ORDER BY total_sales DESC;`);
   const [viewingInsight, setViewingInsight] = useState<SavedInsight | null>(null);
   const [isQueryCollapsed, setIsQueryCollapsed] = useState(true);
   const [isPromptCollapsed, setIsPromptCollapsed] = useState(true);
+
+  // 종합 요약 수정 상태
+  const [isEditingSummary, setIsEditingSummary] = useState(false);
+  const [editedSummary, setEditedSummary] = useState('');
 
   // PDF 내보내기 상태
   const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -891,45 +896,98 @@ ORDER BY total_sales DESC;`);
                         <Sparkles className="w-4 h-4" />
                         {mode === 'saved' ? '저장된 인사이트 종합 요약' : '전체 브랜드 종합 요약'}
                       </h3>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={saveSummaryReport}
-                        disabled={isSavingReport || reportSaved}
-                        className={`h-8 text-xs ${
-                          reportSaved 
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
-                            : 'hover:bg-gray-100'
-                        }`}
-                      >
-                        {isSavingReport ? (
+                      <div className="flex items-center gap-2">
+                        {isEditingSummary ? (
                           <>
-                            <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                            저장 중...
-                          </>
-                        ) : reportSaved ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 mr-1.5 text-emerald-500" />
-                            저장됨
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setIsEditingSummary(false);
+                                setEditedSummary('');
+                              }}
+                              className="h-8 text-xs border-gray-200 text-gray-600 hover:bg-gray-100"
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSummary({ ...summary, insight: editedSummary });
+                                setIsEditingSummary(false);
+                                setReportSaved(false);
+                              }}
+                              className="h-8 text-xs bg-gray-900 hover:bg-gray-800 text-white"
+                            >
+                              <Check className="w-3.5 h-3.5 mr-1.5" />
+                              적용
+                            </Button>
                           </>
                         ) : (
                           <>
-                            <Save className="w-3.5 h-3.5 mr-1.5" />
-                            요약 보고서 저장
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditedSummary(summary.insight);
+                                setIsEditingSummary(true);
+                              }}
+                              className="h-8 text-xs border-gray-200 text-gray-600 hover:bg-gray-100"
+                            >
+                              <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                              수정
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={saveSummaryReport}
+                              disabled={isSavingReport || reportSaved}
+                              className={`h-8 text-xs ${
+                                reportSaved 
+                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                                  : 'hover:bg-gray-100'
+                              }`}
+                            >
+                              {isSavingReport ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                                  저장 중...
+                                </>
+                              ) : reportSaved ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 mr-1.5 text-emerald-500" />
+                                  저장됨
+                                </>
+                              ) : (
+                                <>
+                                  <Save className="w-3.5 h-3.5 mr-1.5" />
+                                  요약 보고서 저장
+                                </>
+                              )}
+                            </Button>
                           </>
                         )}
-                      </Button>
+                      </div>
                     </div>
-                    <article className="prose prose-sm max-w-none
-                      prose-headings:text-gray-900
-                      prose-p:text-gray-700
-                      prose-li:text-gray-700
-                      prose-strong:text-gray-900
-                    ">
-                      <ReactMarkdown remarkPlugins={[[remarkGfm, { strikethrough: false }]]}>
-                        {summary.insight}
-                      </ReactMarkdown>
-                    </article>
+                    {isEditingSummary ? (
+                      <Textarea
+                        value={editedSummary}
+                        onChange={(e) => setEditedSummary(e.target.value)}
+                        className="min-h-[400px] text-sm font-mono bg-white border-gray-200 text-gray-900"
+                        placeholder="마크다운 형식으로 수정하세요..."
+                      />
+                    ) : (
+                      <article className="prose prose-sm max-w-none
+                        prose-headings:text-gray-900
+                        prose-p:text-gray-700
+                        prose-li:text-gray-700
+                        prose-strong:text-gray-900
+                      ">
+                        <ReactMarkdown remarkPlugins={[[remarkGfm, { strikethrough: false }]]}>
+                          {summary.insight}
+                        </ReactMarkdown>
+                      </article>
+                    )}
                   </div>
                 )}
               </div>
