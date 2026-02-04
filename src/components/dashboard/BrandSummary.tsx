@@ -27,12 +27,22 @@ import {
   Eye,
   FileDown,
   Pencil,
+  Upload,
+  FileSpreadsheet,
+  Image,
 } from 'lucide-react';
 import { SAMPLE_BRANDS, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE, AVAILABLE_REGIONS } from '@/lib/prompts';
 import type { BrandInsight, InsightResponse, SavedInsight, RegionId } from '@/types';
 
 interface BrandSummaryProps {
   onClose: () => void;
+}
+
+interface ExternalSource {
+  name: string;
+  type: 'excel' | 'image' | 'text' | 'pdf';
+  content: string;
+  preview?: string;
 }
 
 export function BrandSummary({ onClose }: BrandSummaryProps) {
@@ -89,6 +99,10 @@ ORDER BY total_sales DESC;`);
   // PDF 내보내기 상태
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
+  // 외부 소스 상태
+  const [externalSources, setExternalSources] = useState<ExternalSource[]>([]);
+  const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+
   // 저장된 인사이트 불러오기
   const fetchSavedInsights = async () => {
     setIsLoadingInsights(true);
@@ -127,12 +141,52 @@ ORDER BY total_sales DESC;`);
     );
   };
 
+  // 파일 업로드 처리
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploadingFiles(true);
+
+    try {
+      const formData = new FormData();
+      Array.from(files).forEach((file) => {
+        formData.append('files', file);
+      });
+
+      const response = await fetch('/api/upload-source', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setExternalSources((prev) => [...prev, ...data.files]);
+      } else {
+        alert(data.error || '파일 업로드에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('파일 업로드 실패:', error);
+      alert('파일 업로드에 실패했습니다.');
+    } finally {
+      setIsUploadingFiles(false);
+      // input 초기화
+      e.target.value = '';
+    }
+  };
+
+  // 외부 소스 삭제
+  const removeExternalSource = (index: number) => {
+    setExternalSources((prev) => prev.filter((_, i) => i !== index));
+  };
+
   // 저장된 인사이트로 종합 요약 생성
   const generateSummaryFromSaved = async () => {
-    if (selectedInsights.length === 0) return;
+    if (selectedInsights.length === 0 && externalSources.length === 0) return;
 
     setIsGenerating(true);
-    setCurrentStep('저장된 인사이트 종합 중...');
+    setCurrentStep('종합 분석 중...');
     setSummary(null);
 
     const selectedData = savedInsights
@@ -149,6 +203,7 @@ ORDER BY total_sales DESC;`);
         body: JSON.stringify({
           brandInsights: selectedData,
           customPrompt: customPrompt.trim() || undefined,
+          externalSources: externalSources.length > 0 ? externalSources : undefined,
         }),
       });
 
@@ -161,6 +216,8 @@ ORDER BY total_sales DESC;`);
           responseTime: summaryData.responseTime,
           model: summaryData.model,
         });
+      } else {
+        alert(summaryData.error || '요약 생성에 실패했습니다.');
       }
     } catch (error) {
       console.error('요약 생성 실패:', error);
@@ -673,6 +730,68 @@ ORDER BY total_sales DESC;`);
                   )}
                 </div>
 
+                {/* 외부 소스 업로드 */}
+                <div className="mb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
+                      <Upload className="w-3.5 h-3.5" />
+                      외부 소스 추가
+                    </span>
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        multiple
+                        accept=".xlsx,.xls,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                        disabled={isUploadingFiles}
+                      />
+                      <span className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                        {isUploadingFiles ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            업로드 중...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-3 h-3" />
+                            파일 추가
+                          </>
+                        )}
+                      </span>
+                    </label>
+                  </div>
+                  
+                  {externalSources.length > 0 && (
+                    <div className="space-y-1.5 mb-2">
+                      {externalSources.map((source, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center gap-2 p-2 rounded-lg bg-blue-50 border border-blue-100"
+                        >
+                          {source.type === 'excel' && <FileSpreadsheet className="w-4 h-4 text-green-600 flex-shrink-0" />}
+                          {source.type === 'image' && <Image className="w-4 h-4 text-purple-600 flex-shrink-0" />}
+                          {source.type === 'text' && <FileText className="w-4 h-4 text-gray-600 flex-shrink-0" />}
+                          {source.type === 'pdf' && <FileText className="w-4 h-4 text-red-600 flex-shrink-0" />}
+                          <span className="text-xs text-gray-700 truncate flex-1">{source.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeExternalSource(index)}
+                            className="h-5 w-5 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  <p className="text-[10px] text-gray-400">
+                    엑셀(.xlsx), 이미지(.png, .jpg), 텍스트(.txt, .csv) 지원
+                  </p>
+                </div>
+
                 {/* 프롬프트 지침 설정 */}
                 <div className="mb-3">
                   <button
@@ -705,7 +824,7 @@ ORDER BY total_sales DESC;`);
                 <div className="flex gap-2">
                   <Button
                     onClick={generateSummaryFromSaved}
-                    disabled={isGenerating || selectedInsights.length === 0}
+                    disabled={isGenerating || (selectedInsights.length === 0 && externalSources.length === 0)}
                     className="flex-1 bg-gray-900 hover:bg-gray-800 text-white"
                   >
                     {isGenerating ? (
@@ -716,7 +835,7 @@ ORDER BY total_sales DESC;`);
                     ) : (
                       <>
                         <Sparkles className="w-4 h-4 mr-2" />
-                        {selectedInsights.length}개 요약
+                        {selectedInsights.length + externalSources.length}개 분석
                       </>
                     )}
                   </Button>

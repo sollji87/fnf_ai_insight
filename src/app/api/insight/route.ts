@@ -56,16 +56,22 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { brandInsights, customPrompt } = await request.json();
+    const { brandInsights, customPrompt, externalSources } = await request.json();
 
-    if (!brandInsights || !Array.isArray(brandInsights)) {
+    // 브랜드 인사이트 또는 외부 소스 중 하나는 필요
+    if ((!brandInsights || !Array.isArray(brandInsights) || brandInsights.length === 0) && 
+        (!externalSources || !Array.isArray(externalSources) || externalSources.length === 0)) {
       return NextResponse.json(
-        { error: '브랜드 인사이트 배열이 필요합니다.' },
+        { error: '브랜드 인사이트 또는 외부 소스가 필요합니다.' },
         { status: 400 }
       );
     }
 
-    const summaryResult = await generateBrandSummary(brandInsights, customPrompt);
+    const summaryResult = await generateBrandSummary(
+      brandInsights || [], 
+      customPrompt, 
+      externalSources
+    );
 
     return NextResponse.json({
       success: true,

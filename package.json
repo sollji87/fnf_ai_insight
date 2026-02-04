@@ -48,6 +48,7 @@
     "server-only": "0.0.1",
     "snowflake-sdk": "^2.3.3",
     "ts-pattern": "^5",
+    "xlsx": "^0.18.5",
     "zod": "^3",
     "zustand": "^4"
   },

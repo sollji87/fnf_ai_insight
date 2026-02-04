@@ -81,10 +81,21 @@ export async function generateInsight(
   };
 }
 
+// 외부 소스 타입 정의
+interface ExternalSource {
+  name: string;
+  type: 'excel' | 'image' | 'text' | 'pdf';
+  content: string;
+}
+
 export async function generateBrandSummary(
   brandInsights: { brandName: string; insight: string }[],
-  customPrompt?: string
+  customPrompt?: string,
+  externalSources?: ExternalSource[]
 ): Promise<InsightResponse> {
+  const startTime = Date.now();
+  const model = 'claude-sonnet-4-5-20250929';
+
   const defaultInstructions = `위 브랜드별 인사이트를 바탕으로 다음 내용을 포함하여 종합 분석해주세요:
 1. 전체 브랜드 성과 요약
 2. 브랜드간 비교 분석 (강점/약점)
@@ -93,7 +104,9 @@ export async function generateBrandSummary(
 
   const userInstructions = customPrompt || defaultInstructions;
 
-  const summaryPrompt = `다음은 각 브랜드별 AI 분석 인사이트입니다. 이를 종합하여 전체 브랜드 요약 및 비교 분석을 마크다운 형식으로 작성해주세요.
+  // 브랜드 인사이트 섹션
+  const insightsSection = brandInsights.length > 0
+    ? `# 브랜드별 인사이트
 
 ${brandInsights
   .map(
@@ -101,11 +114,84 @@ ${brandInsights
 ${bi.insight}
 `
   )
-  .join('\n---\n\n')}
+  .join('\n---\n\n')}`
+    : '';
+
+  // 외부 소스 섹션 (이미지 제외)
+  const textSources = externalSources?.filter(s => s.type !== 'image') || [];
+  const imageSources = externalSources?.filter(s => s.type === 'image') || [];
+
+  const externalTextSection = textSources.length > 0
+    ? `\n\n# 외부 참고 자료
+
+${textSources.map(s => s.content).join('\n\n---\n\n')}`
+    : '';
+
+  // 기본 텍스트 프롬프트 구성
+  const basePrompt = `다음은 분석할 자료입니다. 이를 종합하여 전체 요약 및 분석을 마크다운 형식으로 작성해주세요.
+
+${insightsSection}${externalTextSection}
 
 <분석 지침>
 ${userInstructions}
 </분석 지침>`;
 
-  return generateInsight(SYSTEM_PROMPT, summaryPrompt);
+  // 이미지가 있는 경우 멀티모달 API 사용
+  if (imageSources.length > 0) {
+    const contentBlocks: Anthropic.MessageCreateParams['messages'][0]['content'] = [];
+
+    // 이미지 추가
+    for (const img of imageSources) {
+      // data:image/png;base64,... 형식에서 추출
+      const matches = img.content.match(/^data:([^;]+);base64,(.+)$/);
+      if (matches) {
+        const mediaType = matches[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+        const base64Data = matches[2];
+        contentBlocks.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: mediaType,
+            data: base64Data,
+          },
+        });
+        contentBlocks.push({
+          type: 'text',
+          text: `[위 이미지: ${img.name}]`,
+        });
+      }
+    }
+
+    // 텍스트 프롬프트 추가
+    contentBlocks.push({
+      type: 'text',
+      text: basePrompt,
+    });
+
+    const response = await anthropic.messages.create({
+      model,
+      max_tokens: 8192,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: contentBlocks,
+        },
+      ],
+    });
+
+    const responseTime = Date.now() - startTime;
+    const textContent = response.content.find((block) => block.type === 'text');
+    const insight = textContent && 'text' in textContent ? textContent.text : '';
+
+    return {
+      insight,
+      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      responseTime,
+      model,
+    };
+  }
+
+  // 이미지가 없는 경우 기존 방식
+  return generateInsight(SYSTEM_PROMPT, basePrompt);
 }
