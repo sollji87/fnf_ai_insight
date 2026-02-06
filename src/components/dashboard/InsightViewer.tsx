@@ -4,7 +4,8 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
-import { FileText, Copy, Download, Check, Clock, Coins, Cpu, Save, X } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { FileText, Copy, Download, Check, Clock, Coins, Cpu, Save, X, Pencil } from 'lucide-react';
 import type { InsightResponse, RegionId } from '@/types';
 
 interface InsightViewerProps {
@@ -24,18 +25,46 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const copyToClipboard = async () => {
-    if (!insightResponse?.insight) return;
+  // 편집 관련 상태
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedInsight, setEditedInsight] = useState('');
+  const [currentInsight, setCurrentInsight] = useState(insightResponse?.insight || '');
 
-    await navigator.clipboard.writeText(insightResponse.insight);
+  // insightResponse가 변경되면 currentInsight 업데이트
+  if (insightResponse?.insight && insightResponse.insight !== currentInsight && !isEditing) {
+    setCurrentInsight(insightResponse.insight);
+  }
+
+  // 편집 시작
+  const startEditing = () => {
+    setEditedInsight(currentInsight);
+    setIsEditing(true);
+  };
+
+  // 편집 취소
+  const cancelEditing = () => {
+    setEditedInsight('');
+    setIsEditing(false);
+  };
+
+  // 편집 적용
+  const applyEdit = () => {
+    setCurrentInsight(editedInsight);
+    setIsEditing(false);
+  };
+
+  const copyToClipboard = async () => {
+    if (!currentInsight) return;
+
+    await navigator.clipboard.writeText(currentInsight);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const downloadMarkdown = () => {
-    if (!insightResponse?.insight) return;
+    if (!currentInsight) return;
 
-    const blob = new Blob([insightResponse.insight], { type: 'text/markdown' });
+    const blob = new Blob([currentInsight], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -47,7 +76,7 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
   };
 
   const handleSave = async () => {
-    if (!insightResponse?.insight || !saveTitle.trim()) return;
+    if (!currentInsight || !saveTitle.trim()) return;
 
     setIsSaving(true);
     try {
@@ -57,11 +86,11 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
         body: JSON.stringify({
           title: saveTitle.trim(),
           brandName: saveBrandName.trim() || undefined,
-          insight: insightResponse.insight,
+          insight: currentInsight,
           query: currentQuery,
           analysisRequest: analysisRequest,
-          tokensUsed: insightResponse.tokensUsed,
-          model: insightResponse.model,
+          tokensUsed: insightResponse?.tokensUsed,
+          model: insightResponse?.model,
           region: region, // 국가 정보 포함
           createdBy: createdBy.trim() || '익명',
         }),
@@ -115,37 +144,71 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
           <span className="font-semibold text-gray-900 text-sm">AI 인사이트</span>
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={openSaveDialog}
-            className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
-          >
-            <Save className="w-3.5 h-3.5 mr-1" />
-            저장
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={copyToClipboard}
-            className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
-          >
-            {copied ? (
-              <Check className="w-3.5 h-3.5 mr-1 text-emerald-500" />
-            ) : (
-              <Copy className="w-3.5 h-3.5 mr-1" />
-            )}
-            {copied ? '복사됨' : '복사'}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={downloadMarkdown}
-            className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
-          >
-            <Download className="w-3.5 h-3.5 mr-1" />
-            다운로드
-          </Button>
+          {isEditing ? (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={cancelEditing}
+                className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
+              >
+                <X className="w-3.5 h-3.5 mr-1" />
+                취소
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={applyEdit}
+                className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 h-8 text-xs"
+              >
+                <Check className="w-3.5 h-3.5 mr-1" />
+                적용
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={startEditing}
+                className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
+              >
+                <Pencil className="w-3.5 h-3.5 mr-1" />
+                수정
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={openSaveDialog}
+                className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
+              >
+                <Save className="w-3.5 h-3.5 mr-1" />
+                저장
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={copyToClipboard}
+                className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
+              >
+                {copied ? (
+                  <Check className="w-3.5 h-3.5 mr-1 text-emerald-500" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5 mr-1" />
+                )}
+                {copied ? '복사됨' : '복사'}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={downloadMarkdown}
+                className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
+              >
+                <Download className="w-3.5 h-3.5 mr-1" />
+                다운로드
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -173,24 +236,33 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
-        <article className="prose prose-sm max-w-none
-          prose-headings:text-gray-900 prose-headings:font-semibold prose-headings:border-b prose-headings:border-gray-100 prose-headings:pb-2 prose-headings:mb-4
-          prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
-          prose-p:text-gray-700 prose-p:leading-relaxed
-          prose-li:text-gray-700 prose-li:marker:text-gray-400
-          prose-strong:text-gray-900 prose-strong:font-semibold
-          prose-code:text-gray-800 prose-code:bg-gray-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-code:text-sm
-          prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg
-          prose-table:border-collapse prose-table:w-full
-          prose-th:bg-gray-50 prose-th:text-gray-700 prose-th:px-4 prose-th:py-2 prose-th:border prose-th:border-gray-200 prose-th:text-left prose-th:font-semibold prose-th:text-sm
-          prose-td:px-4 prose-td:py-2 prose-td:border prose-td:border-gray-200 prose-td:text-gray-700 prose-td:text-sm
-          prose-blockquote:border-l-gray-300 prose-blockquote:bg-gray-50 prose-blockquote:py-1 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic
-          prose-hr:border-gray-200
-        ">
-          <ReactMarkdown remarkPlugins={[[remarkGfm, { strikethrough: false }]]}>
-            {insightResponse.insight}
-          </ReactMarkdown>
-        </article>
+        {isEditing ? (
+          <Textarea
+            value={editedInsight}
+            onChange={(e) => setEditedInsight(e.target.value)}
+            className="min-h-[500px] text-sm font-mono bg-white border-gray-200 text-gray-900 resize-none"
+            placeholder="마크다운 형식으로 수정하세요..."
+          />
+        ) : (
+          <article className="prose prose-sm max-w-none
+            prose-headings:text-gray-900 prose-headings:font-semibold prose-headings:border-b prose-headings:border-gray-100 prose-headings:pb-2 prose-headings:mb-4
+            prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
+            prose-p:text-gray-700 prose-p:leading-relaxed
+            prose-li:text-gray-700 prose-li:marker:text-gray-400
+            prose-strong:text-gray-900 prose-strong:font-semibold
+            prose-code:text-gray-800 prose-code:bg-gray-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-code:text-sm
+            prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg
+            prose-table:border-collapse prose-table:w-full
+            prose-th:bg-gray-50 prose-th:text-gray-700 prose-th:px-4 prose-th:py-2 prose-th:border prose-th:border-gray-200 prose-th:text-left prose-th:font-semibold prose-th:text-sm
+            prose-td:px-4 prose-td:py-2 prose-td:border prose-td:border-gray-200 prose-td:text-gray-700 prose-td:text-sm
+            prose-blockquote:border-l-gray-300 prose-blockquote:bg-gray-50 prose-blockquote:py-1 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic
+            prose-hr:border-gray-200
+          ">
+            <ReactMarkdown remarkPlugins={[[remarkGfm, { strikethrough: false }]]}>
+              {currentInsight}
+            </ReactMarkdown>
+          </article>
+        )}
       </div>
 
       {/* Save Dialog */}
