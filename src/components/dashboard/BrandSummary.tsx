@@ -91,6 +91,11 @@ ORDER BY total_sales DESC;`);
   const [viewingInsight, setViewingInsight] = useState<SavedInsight | null>(null);
   const [isQueryCollapsed, setIsQueryCollapsed] = useState(true);
   const [isPromptCollapsed, setIsPromptCollapsed] = useState(true);
+  
+  // 저장된 인사이트 편집 상태
+  const [isEditingInsight, setIsEditingInsight] = useState(false);
+  const [editedInsightContent, setEditedInsightContent] = useState('');
+  const [isSavingInsight, setIsSavingInsight] = useState(false);
 
   // 종합 요약 수정 상태
   const [isEditingSummary, setIsEditingSummary] = useState(false);
@@ -274,6 +279,57 @@ ORDER BY total_sales DESC;`);
       console.error('요약 보고서 저장 실패:', error);
     } finally {
       setIsSavingReport(false);
+    }
+  };
+
+  // 저장된 인사이트 편집 시작
+  const startEditingInsight = () => {
+    if (!viewingInsight) return;
+    setEditedInsightContent(viewingInsight.insight);
+    setIsEditingInsight(true);
+  };
+
+  // 저장된 인사이트 편집 취소
+  const cancelEditingInsight = () => {
+    setIsEditingInsight(false);
+    setEditedInsightContent('');
+  };
+
+  // 저장된 인사이트 편집 저장
+  const saveEditedInsight = async () => {
+    if (!viewingInsight || !editedInsightContent.trim()) return;
+
+    setIsSavingInsight(true);
+    try {
+      const response = await fetch('/api/saved-insights', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: viewingInsight.id,
+          insight: editedInsightContent.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // 로컬 상태 업데이트
+        setSavedInsights((prev) =>
+          prev.map((i) =>
+            i.id === viewingInsight.id ? { ...i, insight: editedInsightContent.trim() } : i
+          )
+        );
+        setViewingInsight({ ...viewingInsight, insight: editedInsightContent.trim() });
+        setIsEditingInsight(false);
+        setEditedInsightContent('');
+      } else {
+        alert(data.error || '저장에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('인사이트 업데이트 실패:', error);
+      alert('저장에 실패했습니다.');
+    } finally {
+      setIsSavingInsight(false);
     }
   };
 
@@ -1134,33 +1190,89 @@ ORDER BY total_sales DESC;`);
                   </span>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setViewingInsight(null)}
-                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 h-8 w-8 p-0 flex-shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </Button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {isEditingInsight ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={cancelEditingInsight}
+                      disabled={isSavingInsight}
+                      className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 h-8 text-xs"
+                    >
+                      취소
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={saveEditedInsight}
+                      disabled={isSavingInsight}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs"
+                    >
+                      {isSavingInsight ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                          저장 중...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5 mr-1.5" />
+                          저장
+                        </>
+                      )}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={startEditingInsight}
+                    className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 h-8 text-xs"
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                    수정
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setViewingInsight(null);
+                    setIsEditingInsight(false);
+                    setEditedInsightContent('');
+                  }}
+                  className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 h-8 w-8 p-0"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
 
             {/* 모달 콘텐츠 */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* 인사이트 내용 */}
-              <article className="prose prose-sm max-w-none
-                prose-headings:text-gray-900 prose-headings:font-semibold
-                prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
-                prose-p:text-gray-700 prose-p:leading-relaxed
-                prose-li:text-gray-700 prose-li:marker:text-gray-400
-                prose-strong:text-gray-900 prose-strong:font-semibold
-                prose-table:border-collapse prose-table:w-full
-                prose-th:bg-gray-50 prose-th:text-gray-700 prose-th:px-4 prose-th:py-2 prose-th:border prose-th:border-gray-200 prose-th:text-left prose-th:font-semibold prose-th:text-sm
-                prose-td:px-4 prose-td:py-2 prose-td:border prose-td:border-gray-200 prose-td:text-gray-700 prose-td:text-sm
-              ">
-                <ReactMarkdown remarkPlugins={[[remarkGfm, { strikethrough: false }]]}>
-                  {viewingInsight.insight}
-                </ReactMarkdown>
-              </article>
+              {isEditingInsight ? (
+                <Textarea
+                  value={editedInsightContent}
+                  onChange={(e) => setEditedInsightContent(e.target.value)}
+                  className="min-h-[400px] text-sm font-mono bg-white border-gray-200 text-gray-900"
+                  placeholder="마크다운 형식으로 수정하세요..."
+                />
+              ) : (
+                <article className="prose prose-sm max-w-none
+                  prose-headings:text-gray-900 prose-headings:font-semibold
+                  prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
+                  prose-p:text-gray-700 prose-p:leading-relaxed
+                  prose-li:text-gray-700 prose-li:marker:text-gray-400
+                  prose-strong:text-gray-900 prose-strong:font-semibold
+                  prose-table:border-collapse prose-table:w-full
+                  prose-th:bg-gray-50 prose-th:text-gray-700 prose-th:px-4 prose-th:py-2 prose-th:border prose-th:border-gray-200 prose-th:text-left prose-th:font-semibold prose-th:text-sm
+                  prose-td:px-4 prose-td:py-2 prose-td:border prose-td:border-gray-200 prose-td:text-gray-700 prose-td:text-sm
+                ">
+                  <ReactMarkdown remarkPlugins={[[remarkGfm, { strikethrough: false }]]}>
+                    {viewingInsight.insight}
+                  </ReactMarkdown>
+                </article>
+              )}
 
               {/* 분석 요청 프롬프트 */}
               {viewingInsight.analysisRequest && (

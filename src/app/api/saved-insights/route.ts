@@ -139,6 +139,57 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// 인사이트 업데이트
+export async function PATCH(request: NextRequest) {
+  try {
+    const redis = getRedis();
+    if (!redis) {
+      return NextResponse.json(
+        { error: 'Redis가 설정되지 않았습니다.' },
+        { status: 500 }
+      );
+    }
+
+    const { id, insight } = await request.json();
+
+    if (!id || !insight) {
+      return NextResponse.json(
+        { error: '인사이트 ID와 내용이 필요합니다.' },
+        { status: 400 }
+      );
+    }
+
+    let insights = await redis.get<SavedInsight[]>(INSIGHTS_KEY) || [];
+    const insightIndex = insights.findIndex((i) => i.id === id);
+    
+    if (insightIndex === -1) {
+      return NextResponse.json(
+        { error: '인사이트를 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+
+    // 인사이트 업데이트
+    insights[insightIndex] = {
+      ...insights[insightIndex],
+      insight,
+    };
+    
+    await redis.set(INSIGHTS_KEY, insights);
+
+    return NextResponse.json({
+      success: true,
+      insight: insights[insightIndex],
+    });
+  } catch (error) {
+    console.error('Redis Error:', error);
+    return NextResponse.json(
+      { error: 'Redis 업데이트 중 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
 // 인사이트 삭제
 export async function DELETE(request: NextRequest) {
   try {
