@@ -29,7 +29,8 @@ export function DataPreview({ queryResult }: DataPreviewProps) {
       .join('\n');
 
     const csv = `${headers}\n${rows}`;
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -110,7 +111,7 @@ export function DataPreview({ queryResult }: DataPreviewProps) {
             </tr>
           </thead>
           <tbody>
-            {queryResult.rows.slice(0, 100).map((row, idx) => (
+            {queryResult.rows.map((row, idx) => (
               <tr
                 key={idx}
                 className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors"
@@ -127,11 +128,6 @@ export function DataPreview({ queryResult }: DataPreviewProps) {
             ))}
           </tbody>
         </table>
-        {queryResult.rowCount > 100 && (
-          <p className="text-center text-gray-400 text-sm py-4 border-t border-gray-100">
-            100개 행만 표시됨 (전체 {queryResult.rowCount}개)
-          </p>
-        )}
       </div>
     </div>
   );
