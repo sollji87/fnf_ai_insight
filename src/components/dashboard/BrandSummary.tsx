@@ -30,6 +30,9 @@ import {
   Upload,
   FileSpreadsheet,
   Image,
+  Undo2,
+  Trash,
+  ArrowLeft,
 } from 'lucide-react';
 import { SAMPLE_BRANDS, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE, AVAILABLE_REGIONS } from '@/lib/prompts';
 import type { BrandInsight, InsightResponse, SavedInsight, RegionId } from '@/types';
@@ -104,6 +107,13 @@ ORDER BY total_sales DESC;`);
   // PDF 내보내기 상태
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
+  // 휴지통 관련 상태
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashedInsights, setTrashedInsights] = useState<SavedInsight[]>([]);
+  const [isLoadingTrash, setIsLoadingTrash] = useState(false);
+  const [restoringIds, setRestoringIds] = useState<Set<string>>(new Set());
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
   // 외부 소스 상태
   const [externalSources, setExternalSources] = useState<ExternalSource[]>([]);
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
@@ -124,7 +134,71 @@ ORDER BY total_sales DESC;`);
     }
   };
 
-  // 저장된 인사이트 삭제
+  // 휴지통 인사이트 불러오기
+  const fetchTrashedInsights = async () => {
+    setIsLoadingTrash(true);
+    try {
+      const response = await fetch('/api/saved-insights?trash=true');
+      const data = await response.json();
+      if (data.success) {
+        setTrashedInsights(data.insights || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch trashed insights:', error);
+    } finally {
+      setIsLoadingTrash(false);
+    }
+  };
+
+  // 휴지통에서 복원
+  const restoreInsight = async (id: string) => {
+    setRestoringIds((prev) => new Set(prev).add(id));
+    try {
+      const response = await fetch('/api/saved-insights', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, restore: true }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setTrashedInsights((prev) => prev.filter((i) => i.id !== id));
+        // 복원된 인사이트가 바로 보이도록 목록 새로고침
+        fetchSavedInsights();
+      }
+    } catch (error) {
+      console.error('Failed to restore insight:', error);
+    } finally {
+      setRestoringIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  // 영구 삭제
+  const permanentlyDeleteInsight = async (id: string) => {
+    setDeletingIds((prev) => new Set(prev).add(id));
+    try {
+      await fetch('/api/saved-insights', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, permanent: true }),
+      });
+      setTrashedInsights((prev) => prev.filter((i) => i.id !== id));
+    } catch (error) {
+      console.error('Failed to permanently delete insight:', error);
+    } finally {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  // 저장된 인사이트 삭제 (소프트 삭제 → 휴지통으로 이동)
   const deleteInsight = async (id: string) => {
     try {
       await fetch('/api/saved-insights', {
@@ -708,207 +782,330 @@ ORDER BY total_sales DESC;`);
                 </div>
 
                 {/* 저장된 인사이트 모드 */}
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-gray-900">
-                    저장된 인사이트
-                    <span className="ml-1.5 text-xs font-normal text-gray-500">
-                      ({savedInsights.filter(i => (i.region || 'domestic') === selectedRegion).length}개)
-                    </span>
-                  </h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={fetchSavedInsights}
-                    className="h-7 w-7 p-0 text-gray-400 hover:text-gray-600"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingInsights ? 'animate-spin' : ''}`} />
-                  </Button>
-                </div>
-
-                <div className="space-y-1.5 mb-4 flex-1 overflow-y-auto">
-                  {isLoadingInsights ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                    </div>
-                  ) : savedInsights.filter(i => (i.region || 'domestic') === selectedRegion).length === 0 ? (
-                    <div className="text-center py-8">
-                      <FileText className="w-8 h-8 mx-auto text-gray-300 mb-2" />
-                      <p className="text-xs text-gray-500">저장된 인사이트가 없습니다</p>
-                      <p className="text-xs text-gray-400 mt-1">AI 인사이트 생성 후 저장해주세요</p>
-                    </div>
-                  ) : (
-                    savedInsights.filter(i => (i.region || 'domestic') === selectedRegion).map((insight) => (
-                      <div
-                        key={insight.id}
-                        className="flex items-start gap-2 p-2.5 rounded-lg hover:bg-gray-100 transition-colors group"
+                {showTrash ? (
+                  <>
+                    {/* 휴지통 뷰 */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowTrash(false)}
+                          className="h-7 w-7 p-0 text-gray-500 hover:text-gray-900"
+                          title="돌아가기"
+                        >
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                        </Button>
+                        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                          <Trash className="w-3.5 h-3.5 text-gray-500" />
+                          휴지통
+                          <span className="text-xs font-normal text-gray-500">
+                            ({trashedInsights.length}개)
+                          </span>
+                        </h3>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={fetchTrashedInsights}
+                        className="h-7 w-7 p-0 text-gray-400 hover:text-gray-600"
                       >
-                        <Checkbox
-                          id={insight.id}
-                          checked={selectedInsights.includes(insight.id)}
-                          onCheckedChange={() => toggleInsightSelection(insight.id)}
-                          className="mt-0.5 border-gray-300 data-[state=checked]:bg-gray-900 data-[state=checked]:border-gray-900"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <Label htmlFor={insight.id} className="text-xs font-medium text-gray-800 cursor-pointer block truncate">
-                            {insight.title}
-                          </Label>
-                          {insight.brandName && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded mt-1 inline-block">
-                              {insight.brandName}
-                            </span>
-                          )}
+                        <RefreshCw className={`w-3.5 h-3.5 ${isLoadingTrash ? 'animate-spin' : ''}`} />
+                      </Button>
+                    </div>
+
+                    <p className="text-[10px] text-gray-400 mb-3">
+                      삭제된 인사이트는 30일 후 자동으로 영구 삭제됩니다
+                    </p>
+
+                    <div className="space-y-1.5 mb-4 flex-1 overflow-y-auto">
+                      {isLoadingTrash ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                        </div>
+                      ) : trashedInsights.length === 0 ? (
+                        <div className="text-center py-8">
+                          <Trash className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                          <p className="text-xs text-gray-500">휴지통이 비어있습니다</p>
+                        </div>
+                      ) : (
+                        trashedInsights.map((insight) => (
+                          <div
+                            key={insight.id}
+                            className="flex items-start gap-2 p-2.5 rounded-lg hover:bg-gray-100 transition-colors group"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-600 truncate">
+                                {insight.title}
+                              </p>
+                              {insight.brandName && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-500 rounded mt-1 inline-block">
+                                  {insight.brandName}
+                                </span>
+                              )}
+                              <p className="text-[10px] text-gray-400 mt-1">
+                                삭제: {insight.deletedAt ? new Date(insight.deletedAt).toLocaleDateString('ko-KR') : '-'}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => restoreInsight(insight.id)}
+                                disabled={restoringIds.has(insight.id)}
+                                className="h-6 w-6 p-0 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50"
+                                title="복원"
+                              >
+                                {restoringIds.has(insight.id) ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Undo2 className="w-3 h-3" />
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => permanentlyDeleteInsight(insight.id)}
+                                disabled={deletingIds.has(insight.id)}
+                                className="h-6 w-6 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                                title="영구 삭제"
+                              >
+                                {deletingIds.has(insight.id) ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3 h-3" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* 일반 인사이트 목록 뷰 */}
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-gray-900">
+                        저장된 인사이트
+                        <span className="ml-1.5 text-xs font-normal text-gray-500">
+                          ({savedInsights.filter(i => (i.region || 'domestic') === selectedRegion).length}개)
+                        </span>
+                      </h3>
+                      <div className="flex items-center gap-0.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setShowTrash(true);
+                            fetchTrashedInsights();
+                          }}
+                          className="h-7 w-7 p-0 text-gray-400 hover:text-gray-600"
+                          title="휴지통"
+                        >
+                          <Trash className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={fetchSavedInsights}
+                          className="h-7 w-7 p-0 text-gray-400 hover:text-gray-600"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isLoadingInsights ? 'animate-spin' : ''}`} />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 mb-4 flex-1 overflow-y-auto">
+                      {isLoadingInsights ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                        </div>
+                      ) : savedInsights.filter(i => (i.region || 'domestic') === selectedRegion).length === 0 ? (
+                        <div className="text-center py-8">
+                          <FileText className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                          <p className="text-xs text-gray-500">저장된 인사이트가 없습니다</p>
+                          <p className="text-xs text-gray-400 mt-1">AI 인사이트 생성 후 저장해주세요</p>
+                        </div>
+                      ) : (
+                        savedInsights.filter(i => (i.region || 'domestic') === selectedRegion).map((insight) => (
+                          <div
+                            key={insight.id}
+                            className="flex items-start gap-2 p-2.5 rounded-lg hover:bg-gray-100 transition-colors group"
+                          >
+                            <Checkbox
+                              id={insight.id}
+                              checked={selectedInsights.includes(insight.id)}
+                              onCheckedChange={() => toggleInsightSelection(insight.id)}
+                              className="mt-0.5 border-gray-300 data-[state=checked]:bg-gray-900 data-[state=checked]:border-gray-900"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <Label htmlFor={insight.id} className="text-xs font-medium text-gray-800 cursor-pointer block truncate">
+                                {insight.title}
+                              </Label>
+                              {insight.brandName && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded mt-1 inline-block">
+                                  {insight.brandName}
+                                </span>
+                              )}
+                              <p className="text-[10px] text-gray-400 mt-1">
+                                {new Date(insight.createdAt).toLocaleDateString('ko-KR')} · {insight.createdBy}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setViewingInsight(insight)}
+                                className="h-6 w-6 p-0 text-gray-400 hover:text-blue-500 hover:bg-blue-50"
+                                title="내용 보기"
+                              >
+                                <Eye className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => deleteInsight(insight.id)}
+                                className="h-6 w-6 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                                title="삭제"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* 외부 소스 업로드, 프롬프트 설정, 분석 버튼 (휴지통 뷰에서는 숨김) */}
+                {!showTrash && (
+                  <>
+                    <div className="mb-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
+                          <Upload className="w-3.5 h-3.5" />
+                          외부 소스 추가
+                        </span>
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            multiple
+                            accept=".xlsx,.xls,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp,.pdf"
+                            onChange={handleFileUpload}
+                            className="hidden"
+                            disabled={isUploadingFiles}
+                          />
+                          <span className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                            {isUploadingFiles ? (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                업로드 중...
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="w-3 h-3" />
+                                파일 추가
+                              </>
+                            )}
+                          </span>
+                        </label>
+                      </div>
+                      
+                      {externalSources.length > 0 && (
+                        <div className="space-y-1.5 mb-2">
+                          {externalSources.map((source, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center gap-2 p-2 rounded-lg bg-blue-50 border border-blue-100"
+                            >
+                              {source.type === 'excel' && <FileSpreadsheet className="w-4 h-4 text-green-600 flex-shrink-0" />}
+                              {source.type === 'image' && <Image className="w-4 h-4 text-purple-600 flex-shrink-0" />}
+                              {source.type === 'text' && <FileText className="w-4 h-4 text-gray-600 flex-shrink-0" />}
+                              {source.type === 'pdf' && <FileText className="w-4 h-4 text-red-600 flex-shrink-0" />}
+                              <span className="text-xs text-gray-700 truncate flex-1">{source.name}</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeExternalSource(index)}
+                                className="h-5 w-5 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      <p className="text-[10px] text-gray-400">
+                        엑셀(.xlsx), PDF(.pdf), 이미지(.png, .jpg), 텍스트(.txt, .csv) 지원
+                      </p>
+                    </div>
+
+                    {/* 프롬프트 지침 설정 */}
+                    <div className="mb-3">
+                      <button
+                        onClick={() => setShowPromptSettings(!showPromptSettings)}
+                        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 transition-colors w-full"
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                        <span>분석 지침 설정</span>
+                        {showPromptSettings ? (
+                          <ChevronUp className="w-3.5 h-3.5 ml-auto" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 ml-auto" />
+                        )}
+                      </button>
+                      {showPromptSettings && (
+                        <div className="mt-2">
+                          <Textarea
+                            value={customPrompt}
+                            onChange={(e) => setCustomPrompt(e.target.value)}
+                            placeholder="분석 시 AI에게 전달할 지침을 입력하세요..."
+                            className="text-xs min-h-[100px] bg-white border-gray-200 text-gray-900 resize-none"
+                          />
                           <p className="text-[10px] text-gray-400 mt-1">
-                            {new Date(insight.createdAt).toLocaleDateString('ko-KR')} · {insight.createdBy}
+                            예: 핵심 성과, 주요 리스크, CEO 전략 방향에 초점
                           </p>
                         </div>
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setViewingInsight(insight)}
-                            className="h-6 w-6 p-0 text-gray-400 hover:text-blue-500 hover:bg-blue-50"
-                            title="내용 보기"
-                          >
-                            <Eye className="w-3 h-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteInsight(insight.id)}
-                            className="h-6 w-6 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50"
-                            title="삭제"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+                      )}
+                    </div>
 
-                {/* 외부 소스 업로드 */}
-                <div className="mb-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
-                      <Upload className="w-3.5 h-3.5" />
-                      외부 소스 추가
-                    </span>
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        multiple
-                        accept=".xlsx,.xls,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp,.pdf"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                        disabled={isUploadingFiles}
-                      />
-                      <span className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                        {isUploadingFiles ? (
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={generateSummaryFromSaved}
+                        disabled={isGenerating || (selectedInsights.length === 0 && externalSources.length === 0)}
+                        className="flex-1 bg-gray-900 hover:bg-gray-800 text-white"
+                      >
+                        {isGenerating ? (
                           <>
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            업로드 중...
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            {currentStep || '요약 생성 중...'}
                           </>
                         ) : (
                           <>
-                            <Plus className="w-3 h-3" />
-                            파일 추가
+                            <Sparkles className="w-4 h-4 mr-2" />
+                            {selectedInsights.length + externalSources.length}개 분석
                           </>
                         )}
-                      </span>
-                    </label>
-                  </div>
-                  
-                  {externalSources.length > 0 && (
-                    <div className="space-y-1.5 mb-2">
-                      {externalSources.map((source, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center gap-2 p-2 rounded-lg bg-blue-50 border border-blue-100"
-                        >
-                          {source.type === 'excel' && <FileSpreadsheet className="w-4 h-4 text-green-600 flex-shrink-0" />}
-                          {source.type === 'image' && <Image className="w-4 h-4 text-purple-600 flex-shrink-0" />}
-                          {source.type === 'text' && <FileText className="w-4 h-4 text-gray-600 flex-shrink-0" />}
-                          {source.type === 'pdf' && <FileText className="w-4 h-4 text-red-600 flex-shrink-0" />}
-                          <span className="text-xs text-gray-700 truncate flex-1">{source.name}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeExternalSource(index)}
-                            className="h-5 w-5 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50"
-                          >
-                            <X className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      ))}
+                      </Button>
+                      <Button
+                        onClick={exportToPdf}
+                        disabled={isExportingPdf || selectedInsights.length === 0}
+                        variant="outline"
+                        className="border-gray-300 text-gray-700 hover:bg-gray-100"
+                        title="선택한 인사이트를 PDF로 내보내기"
+                      >
+                        {isExportingPdf ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <FileDown className="w-4 h-4" />
+                        )}
+                      </Button>
                     </div>
-                  )}
-                  
-                  <p className="text-[10px] text-gray-400">
-                    엑셀(.xlsx), PDF(.pdf), 이미지(.png, .jpg), 텍스트(.txt, .csv) 지원
-                  </p>
-                </div>
-
-                {/* 프롬프트 지침 설정 */}
-                <div className="mb-3">
-                  <button
-                    onClick={() => setShowPromptSettings(!showPromptSettings)}
-                    className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 transition-colors w-full"
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                    <span>분석 지침 설정</span>
-                    {showPromptSettings ? (
-                      <ChevronUp className="w-3.5 h-3.5 ml-auto" />
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5 ml-auto" />
-                    )}
-                  </button>
-                  {showPromptSettings && (
-                    <div className="mt-2">
-                      <Textarea
-                        value={customPrompt}
-                        onChange={(e) => setCustomPrompt(e.target.value)}
-                        placeholder="분석 시 AI에게 전달할 지침을 입력하세요..."
-                        className="text-xs min-h-[100px] bg-white border-gray-200 text-gray-900 resize-none"
-                      />
-                      <p className="text-[10px] text-gray-400 mt-1">
-                        예: 핵심 성과, 주요 리스크, CEO 전략 방향에 초점
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    onClick={generateSummaryFromSaved}
-                    disabled={isGenerating || (selectedInsights.length === 0 && externalSources.length === 0)}
-                    className="flex-1 bg-gray-900 hover:bg-gray-800 text-white"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        {currentStep || '요약 생성 중...'}
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        {selectedInsights.length + externalSources.length}개 분석
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    onClick={exportToPdf}
-                    disabled={isExportingPdf || selectedInsights.length === 0}
-                    variant="outline"
-                    className="border-gray-300 text-gray-700 hover:bg-gray-100"
-                    title="선택한 인사이트를 PDF로 내보내기"
-                  >
-                    {isExportingPdf ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <FileDown className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
+                  </>
+                )}
               </>
             ) : (
               <>
