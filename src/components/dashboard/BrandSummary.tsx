@@ -135,6 +135,7 @@ ORDER BY total_sales DESC;`);
   // 외부 소스 상태
   const [externalSources, setExternalSources] = useState<ExternalSource[]>([]);
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+  const [showExternalSourcesList, setShowExternalSourcesList] = useState(false);
 
   // 저장된 인사이트 불러오기
   const fetchSavedInsights = async () => {
@@ -1133,27 +1134,52 @@ ORDER BY total_sales DESC;`);
                       </div>
                       
                       {externalSources.length > 0 && (
-                        <div className="space-y-1.5 mb-2">
-                          {externalSources.map((source, index) => (
-                            <div
-                              key={index}
-                              className="flex items-center gap-2 p-2 rounded-lg bg-blue-50 border border-blue-100"
-                            >
-                              {source.type === 'excel' && <FileSpreadsheet className="w-4 h-4 text-green-600 flex-shrink-0" />}
-                              {source.type === 'image' && <Image className="w-4 h-4 text-purple-600 flex-shrink-0" />}
-                              {source.type === 'text' && <FileText className="w-4 h-4 text-gray-600 flex-shrink-0" />}
-                              {source.type === 'pdf' && <FileText className="w-4 h-4 text-red-600 flex-shrink-0" />}
-                              <span className="text-xs text-gray-700 truncate flex-1">{source.name}</span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeExternalSource(index)}
-                                className="h-5 w-5 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                        <div className="mb-2">
+                          <button
+                            onClick={() => setShowExternalSourcesList(!showExternalSourcesList)}
+                            className="flex items-center gap-1.5 w-full text-xs text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg px-2.5 py-1.5 transition-colors"
+                          >
+                            <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span className="font-medium">{externalSources.length}개 파일 첨부됨</span>
+                            <div className="ml-auto flex items-center gap-1">
+                              <span
+                                role="button"
+                                className="text-[10px] text-red-400 hover:text-red-600 px-1"
+                                onClick={(e) => { e.stopPropagation(); setExternalSources([]); }}
                               >
-                                <X className="w-3 h-3" />
-                              </Button>
+                                전체삭제
+                              </span>
+                              {showExternalSourcesList ? (
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              ) : (
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              )}
                             </div>
-                          ))}
+                          </button>
+                          {showExternalSourcesList && (
+                            <div className="space-y-1 mt-1.5 max-h-[120px] overflow-y-auto pr-1">
+                              {externalSources.map((source, index) => (
+                                <div
+                                  key={index}
+                                  className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-blue-50/50 border border-blue-100"
+                                >
+                                  {source.type === 'excel' && <FileSpreadsheet className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />}
+                                  {source.type === 'image' && <Image className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />}
+                                  {source.type === 'text' && <FileText className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" />}
+                                  {source.type === 'pdf' && <FileText className="w-3.5 h-3.5 text-red-600 flex-shrink-0" />}
+                                  <span className="text-[11px] text-gray-700 truncate flex-1">{source.name}</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeExternalSource(index)}
+                                    className="h-5 w-5 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                       
