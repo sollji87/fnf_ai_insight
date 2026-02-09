@@ -47,6 +47,7 @@ export default function HomePage() {
   const [isQueryLoading, setIsQueryLoading] = useState(false);
   const [isInsightLoading, setIsInsightLoading] = useState(false);
   const [showBrandSummary, setShowBrandSummary] = useState(false);
+  const [loadedAnalysisRequest, setLoadedAnalysisRequest] = useState<string>('');
   
   // 국가 추가 드롭다운 상태
   const [showAddRegion, setShowAddRegion] = useState(false);
@@ -298,6 +299,7 @@ export default function HomePage() {
                 isLoading={isQueryLoading}
                 setIsLoading={setIsQueryLoading}
                 region={activeRegion}
+                onAnalysisRequestLoad={(request) => setLoadedAnalysisRequest(request)}
               />
             </div>
             <div className="h-[55%]">
@@ -310,6 +312,7 @@ export default function HomePage() {
                 setIsLoading={setIsInsightLoading}
                 onGenerateReady={handleGenerateReady}
                 onAnalysisRequestChange={handleAnalysisRequestChange}
+                externalAnalysisRequest={loadedAnalysisRequest}
               />
             </div>
           </div>

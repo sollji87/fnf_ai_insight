@@ -39,14 +39,23 @@ import {
 import { SAMPLE_QUERY_TEMPLATES, AVAILABLE_REGIONS, BRAND_CODES } from '@/lib/prompts';
 import type { QueryResult, SavedQuery, RegionId, BrandCode } from '@/types';
 
+interface SavedInsightRef {
+  id: string;
+  title: string;
+  brandName?: string;
+  query?: string;
+  analysisRequest?: string;
+}
+
 interface SqlEditorProps {
   onQueryResult: (result: QueryResult, query: string) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   region?: RegionId;
+  onAnalysisRequestLoad?: (request: string) => void;
 }
 
-export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'domestic' }: SqlEditorProps) {
+export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'domestic', onAnalysisRequestLoad }: SqlEditorProps) {
   const [query, setQuery] = useState('-- SQL 쿼리를 입력하세요\nSELECT * FROM ');
   const [error, setError] = useState<string | null>(null);
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
@@ -62,6 +71,9 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
   
   // Brand filter state
   const [filterBrand, setFilterBrand] = useState<BrandCode | 'all'>('all');
+  
+  // Cached insights for prompt loading
+  const [cachedInsights, setCachedInsights] = useState<SavedInsightRef[]>([]);
   
   // Batch operations dialog states
   const [showBatchDialog, setShowBatchDialog] = useState(false);
@@ -121,9 +133,33 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
     }
   };
 
+  // 인사이트 캐시 로드 (프롬프트 매칭용)
+  const fetchInsightsForPromptCache = async () => {
+    try {
+      const response = await fetch('/api/saved-insights');
+      const data = await response.json();
+      if (data.success && data.insights) {
+        setCachedInsights(
+          data.insights
+            .filter((i: SavedInsightRef) => i.analysisRequest)
+            .map((i: SavedInsightRef) => ({
+              id: i.id,
+              title: i.title,
+              brandName: i.brandName,
+              query: i.query,
+              analysisRequest: i.analysisRequest,
+            }))
+        );
+      }
+    } catch (err) {
+      console.error('Failed to fetch insights for prompt cache:', err);
+    }
+  };
+
   useEffect(() => {
     fetchSavedQueries();
     fetchTableList();
+    fetchInsightsForPromptCache();
   }, []);
 
   const handleCopyQuery = async () => {
@@ -216,6 +252,27 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
     const saved = savedQueries.find((q) => q.id === value);
     if (saved) {
       setQuery(saved.query);
+      
+      // 매칭되는 인사이트의 analysisRequest 자동 로드
+      if (onAnalysisRequestLoad && cachedInsights.length > 0) {
+        // 1차: 쿼리 텍스트 정확 매칭
+        const queryNormalized = saved.query.trim();
+        let matchedInsight = cachedInsights.find(
+          (i) => i.query && i.query.trim() === queryNormalized
+        );
+        
+        // 2차: 쿼리명으로 인사이트 제목 부분 매칭
+        if (!matchedInsight) {
+          const queryName = saved.name.toLowerCase();
+          matchedInsight = cachedInsights.find(
+            (i) => i.title && i.title.toLowerCase().includes(queryName.replace(/^mlb\s*/i, '').trim())
+          );
+        }
+        
+        if (matchedInsight?.analysisRequest) {
+          onAnalysisRequestLoad(matchedInsight.analysisRequest);
+        }
+      }
     }
   };
 
