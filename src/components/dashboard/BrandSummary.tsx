@@ -74,6 +74,9 @@ ORDER BY total_sales DESC;`);
   
   // 국가 필터 상태
   const [selectedRegion, setSelectedRegion] = useState<RegionId>('domestic');
+  
+  // 브랜드 필터 상태
+  const [selectedBrandFilter, setSelectedBrandFilter] = useState<string>('all');
 
   // 요약 보고서 저장 관련 상태
   const [isSavingReport, setIsSavingReport] = useState(false);
@@ -761,7 +764,7 @@ ORDER BY total_sales DESC;`);
             {mode === 'saved' ? (
               <>
                 {/* 국가 필터 탭 */}
-                <div className="flex gap-1 mb-3 bg-gray-100 p-1 rounded-lg">
+                <div className="flex gap-1 mb-2 bg-gray-100 p-1 rounded-lg">
                   {AVAILABLE_REGIONS.map((region) => (
                     <button
                       key={region.id}
@@ -777,6 +780,39 @@ ORDER BY total_sales DESC;`);
                     >
                       <span>{region.emoji}</span>
                       {region.name}
+                    </button>
+                  ))}
+                </div>
+
+                {/* 브랜드 필터 */}
+                <div className="flex flex-wrap gap-1 mb-3">
+                  <button
+                    onClick={() => {
+                      setSelectedBrandFilter('all');
+                      setSelectedInsights([]);
+                    }}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all border ${
+                      selectedBrandFilter === 'all'
+                        ? 'bg-gray-900 text-white border-gray-900'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    전체
+                  </button>
+                  {SAMPLE_BRANDS.filter(b => b !== 'SUPRA').map((brand) => (
+                    <button
+                      key={brand}
+                      onClick={() => {
+                        setSelectedBrandFilter(brand);
+                        setSelectedInsights([]);
+                      }}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all border ${
+                        selectedBrandFilter === brand
+                          ? 'bg-gray-900 text-white border-gray-900'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      {brand}
                     </button>
                   ))}
                 </div>
@@ -889,7 +925,11 @@ ORDER BY total_sales DESC;`);
                       <h3 className="text-sm font-semibold text-gray-900">
                         저장된 인사이트
                         <span className="ml-1.5 text-xs font-normal text-gray-500">
-                          ({savedInsights.filter(i => (i.region || 'domestic') === selectedRegion).length}개)
+                          ({savedInsights.filter(i => {
+                            const matchRegion = (i.region || 'domestic') === selectedRegion;
+                            const matchBrand = selectedBrandFilter === 'all' || (i.brandName || '').toUpperCase().includes(selectedBrandFilter.toUpperCase());
+                            return matchRegion && matchBrand;
+                          }).length}개)
                         </span>
                       </h3>
                       <div className="flex items-center gap-0.5">
@@ -921,14 +961,22 @@ ORDER BY total_sales DESC;`);
                         <div className="flex items-center justify-center py-8">
                           <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
                         </div>
-                      ) : savedInsights.filter(i => (i.region || 'domestic') === selectedRegion).length === 0 ? (
+                      ) : savedInsights.filter(i => {
+                            const matchRegion = (i.region || 'domestic') === selectedRegion;
+                            const matchBrand = selectedBrandFilter === 'all' || (i.brandName || '').toUpperCase().includes(selectedBrandFilter.toUpperCase());
+                            return matchRegion && matchBrand;
+                          }).length === 0 ? (
                         <div className="text-center py-8">
                           <FileText className="w-8 h-8 mx-auto text-gray-300 mb-2" />
                           <p className="text-xs text-gray-500">저장된 인사이트가 없습니다</p>
                           <p className="text-xs text-gray-400 mt-1">AI 인사이트 생성 후 저장해주세요</p>
                         </div>
                       ) : (
-                        savedInsights.filter(i => (i.region || 'domestic') === selectedRegion).map((insight) => (
+                        savedInsights.filter(i => {
+                            const matchRegion = (i.region || 'domestic') === selectedRegion;
+                            const matchBrand = selectedBrandFilter === 'all' || (i.brandName || '').toUpperCase().includes(selectedBrandFilter.toUpperCase());
+                            return matchRegion && matchBrand;
+                          }).map((insight) => (
                           <div
                             key={insight.id}
                             className="flex items-start gap-2 p-2.5 rounded-lg hover:bg-gray-100 transition-colors group"
