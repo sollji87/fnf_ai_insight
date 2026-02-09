@@ -793,7 +793,7 @@ ORDER BY total_sales DESC;`);
 
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar */}
-          <div className="w-80 border-r border-gray-100 p-4 flex flex-col bg-gray-50/30 overflow-y-auto">
+          <div className="w-80 border-r border-gray-100 p-4 flex flex-col bg-gray-50/30 overflow-y-auto min-h-0">
             {/* Mode Toggle */}
             <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-lg">
               <button
