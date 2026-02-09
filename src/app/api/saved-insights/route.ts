@@ -349,7 +349,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// 인사이트 업데이트
+// 인사이트 업데이트 (insight 본문, analysisRequest, title 등 부분 업데이트 지원)
 export async function PATCH(request: NextRequest) {
   try {
     const redis = getRedis();
@@ -360,11 +360,20 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const { id, insight } = await request.json();
+    const body = await request.json();
+    const { id, insight, analysisRequest, title, query, brandName } = body;
 
-    if (!id || !insight) {
+    if (!id) {
       return NextResponse.json(
-        { error: '인사이트 ID와 내용이 필요합니다.' },
+        { error: '인사이트 ID가 필요합니다.' },
+        { status: 400 }
+      );
+    }
+
+    // 최소 하나의 업데이트 필드가 있어야 함
+    if (!insight && analysisRequest === undefined && !title && !query && !brandName) {
+      return NextResponse.json(
+        { error: '업데이트할 필드가 필요합니다. (insight, analysisRequest, title, query, brandName 중 하나 이상)' },
         { status: 400 }
       );
     }
@@ -379,10 +388,17 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // 인사이트 업데이트
+    // 제공된 필드만 업데이트
+    const updates: Partial<SavedInsight> = {};
+    if (insight !== undefined) updates.insight = insight;
+    if (analysisRequest !== undefined) updates.analysisRequest = analysisRequest;
+    if (title !== undefined) updates.title = title;
+    if (query !== undefined) updates.query = query;
+    if (brandName !== undefined) updates.brandName = brandName;
+
     insights[insightIndex] = {
       ...insights[insightIndex],
-      insight,
+      ...updates,
     };
     
     await redis.set(INSIGHTS_KEY, insights);
@@ -390,6 +406,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({
       success: true,
       insight: insights[insightIndex],
+      updatedFields: Object.keys(updates),
     });
   } catch (error) {
     console.error('Redis Error:', error);
