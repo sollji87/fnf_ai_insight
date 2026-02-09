@@ -253,19 +253,37 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
     if (saved) {
       setQuery(saved.query);
       
-      // 매칭되는 인사이트의 analysisRequest 자동 로드
+      // 매칭되는 인사이트의 analysisRequest 자동 로드 (브랜드 무관)
       if (onAnalysisRequestLoad && cachedInsights.length > 0) {
-        // 1차: 쿼리 텍스트 정확 매칭
-        const queryNormalized = saved.query.trim();
-        let matchedInsight = cachedInsights.find(
-          (i) => i.query && i.query.trim() === queryNormalized
-        );
+        // 브랜드명 제거 함수: "MLB KIDS 12월 매출분석" → "12월 매출분석"
+        const BRAND_NAMES_PATTERN = /^(MLB\s*KIDS|MLB|DISCOVERY|DUVETICA|SERGIO\s*TACCHINI)\s*/i;
+        const stripBrand = (name: string) => name.replace(BRAND_NAMES_PATTERN, '').trim().toLowerCase();
         
-        // 2차: 쿼리명으로 인사이트 제목 부분 매칭
+        const queryNameStripped = stripBrand(saved.name);
+        
+        // 1차: 쿼리명에서 브랜드 제거 후 인사이트 제목과 매칭
+        let matchedInsight = cachedInsights.find((i) => {
+          if (!i.title || !i.analysisRequest) return false;
+          const titleStripped = stripBrand(i.title);
+          return titleStripped === queryNameStripped;
+        });
+        
+        // 2차: 부분 포함 매칭 (쿼리명이 인사이트 제목에 포함되거나 반대)
+        if (!matchedInsight && queryNameStripped.length > 3) {
+          matchedInsight = cachedInsights.find((i) => {
+            if (!i.title || !i.analysisRequest) return false;
+            const titleStripped = stripBrand(i.title);
+            return titleStripped.includes(queryNameStripped) || queryNameStripped.includes(titleStripped);
+          });
+        }
+        
+        // 3차: SQL 쿼리 텍스트 매칭 (브랜드코드 정규화 후 비교)
         if (!matchedInsight) {
-          const queryName = saved.name.toLowerCase();
+          const normalizeQuery = (q: string) => 
+            q.replace(/brd_cd\s*=\s*'[A-Z]{1,2}'/gi, "brd_cd='M'").trim();
+          const queryNormalized = normalizeQuery(saved.query);
           matchedInsight = cachedInsights.find(
-            (i) => i.title && i.title.toLowerCase().includes(queryName.replace(/^mlb\s*/i, '').trim())
+            (i) => i.query && normalizeQuery(i.query) === queryNormalized
           );
         }
         
