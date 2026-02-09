@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
-import pdfParse from 'pdf-parse';
 
 export const runtime = 'nodejs';
+
+// Next.js App Router body size limit (기본 1MB → 10MB로 확장)
+export const maxDuration = 30; // 최대 30초
 
 interface ProcessedFile {
   name: string;
@@ -65,9 +67,10 @@ function parseTextFile(buffer: ArrayBuffer, fileName: string): string {
   return `# 텍스트 파일: ${fileName}\n\n${text}`;
 }
 
-// PDF 파일 파싱
+// PDF 파일 파싱 (pdf-parse를 동적 import하여 다른 파일 업로드에 영향 방지)
 async function parsePdfFile(buffer: ArrayBuffer, fileName: string): Promise<string> {
   try {
+    const pdfParse = (await import('pdf-parse')).default;
     const data = await pdfParse(Buffer.from(buffer));
     const text = data.text.trim();
     

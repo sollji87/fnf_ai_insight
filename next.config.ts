@@ -14,7 +14,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  serverExternalPackages: ['snowflake-sdk'],
+  serverExternalPackages: ['snowflake-sdk', 'pdf-parse'],
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '10mb',
+    },
+  },
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.externals = config.externals || [];
