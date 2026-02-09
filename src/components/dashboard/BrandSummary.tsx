@@ -793,7 +793,7 @@ ORDER BY total_sales DESC;`);
 
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar */}
-          <div className="w-80 border-r border-gray-100 p-4 flex flex-col bg-gray-50/30">
+          <div className="w-80 border-r border-gray-100 p-4 flex flex-col bg-gray-50/30 overflow-y-auto">
             {/* Mode Toggle */}
             <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-lg">
               <button
@@ -1217,7 +1217,7 @@ ORDER BY total_sales DESC;`);
                       )}
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 sticky bottom-0 bg-gray-50/95 backdrop-blur-sm pt-3 pb-1 -mx-4 px-4 border-t border-gray-100">
                       <Button
                         onClick={generateSummaryFromSaved}
                         disabled={isGenerating || (selectedInsights.length === 0 && externalSources.length === 0)}
