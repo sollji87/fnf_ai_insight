@@ -67,6 +67,17 @@ export const SAMPLE_BRANDS = [
   'SUPRA',
 ];
 
+// 브랜드 코드 매핑 (brd_cd 값)
+import type { BrandConfig } from '@/types';
+
+export const BRAND_CODES: BrandConfig[] = [
+  { code: 'M', name: 'MLB' },
+  { code: 'I', name: 'MLB KIDS' },
+  { code: 'X', name: 'DISCOVERY' },
+  { code: 'V', name: 'DUVETICA' },
+  { code: 'ST', name: 'SERGIO TACCHINI' },
+];
+
 // 사용 가능한 국가/지역 목록
 // - isDefault: true인 국가는 기본으로 표시되며 삭제 불가
 // - isDefault: false인 국가는 '+' 버튼으로 추가/삭제 가능

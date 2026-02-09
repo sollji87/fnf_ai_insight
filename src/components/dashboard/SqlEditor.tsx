@@ -31,9 +31,13 @@ import {
   Wand2,
   ChevronDown,
   ChevronUp,
+  Settings2,
+  Plus,
+  ArrowRight,
+  RefreshCw,
 } from 'lucide-react';
-import { SAMPLE_QUERY_TEMPLATES, AVAILABLE_REGIONS } from '@/lib/prompts';
-import type { QueryResult, SavedQuery, RegionId } from '@/types';
+import { SAMPLE_QUERY_TEMPLATES, AVAILABLE_REGIONS, BRAND_CODES } from '@/lib/prompts';
+import type { QueryResult, SavedQuery, RegionId, BrandCode } from '@/types';
 
 interface SqlEditorProps {
   onQueryResult: (result: QueryResult, query: string) => void;
@@ -51,9 +55,25 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
   const [newQueryCreator, setNewQueryCreator] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<SavedQuery['category']>('custom');
   const [selectedSaveRegion, setSelectedSaveRegion] = useState<RegionId>(region || 'domestic');
+  const [selectedSaveBrand, setSelectedSaveBrand] = useState<BrandCode>('M');
   const [selectedQueryId, setSelectedQueryId] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Brand filter state
+  const [filterBrand, setFilterBrand] = useState<BrandCode | 'all'>('all');
+  
+  // Batch operations dialog states
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
+  const [batchSourceBrand, setBatchSourceBrand] = useState<BrandCode>('M');
+  const [batchTargetBrands, setBatchTargetBrands] = useState<BrandCode[]>([]);
+  const [batchDateReplacements, setBatchDateReplacements] = useState<Array<{ from: string; to: string }>>([
+    { from: '', to: '' },
+  ]);
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [batchResult, setBatchResult] = useState<string | null>(null);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const [batchMigrateExisting, setBatchMigrateExisting] = useState(false);
   
   // AI Query Helper states
   const [showAiHelper, setShowAiHelper] = useState(false);
@@ -136,6 +156,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
           query: query,
           category: selectedCategory,
           region: selectedSaveRegion,
+          brand: selectedSaveBrand,
           createdBy: newQueryCreator.trim() || '익명',
         }),
       });
@@ -147,6 +168,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
         setNewQueryName('');
         setNewQueryCreator('');
         setSelectedSaveRegion(region || 'domestic');
+        setSelectedSaveBrand('M');
         setShowSaveDialog(false);
         setSelectedQueryId(data.query.id);
       } else {
@@ -351,6 +373,130 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
     return '쿼리 선택';
   };
 
+  const getBrandLabel = (code: BrandCode): string => {
+    const brand = BRAND_CODES.find(b => b.code === code);
+    return brand ? brand.name : code;
+  };
+
+  // 일괄 복사 실행
+  const handleBatchCopy = async () => {
+    if (batchTargetBrands.length === 0) {
+      setBatchError('대상 브랜드를 하나 이상 선택해주세요.');
+      return;
+    }
+
+    setIsBatchProcessing(true);
+    setBatchError(null);
+    setBatchResult(null);
+
+    try {
+      // 기존 쿼리에 브랜드 미설정된 것들을 소스 브랜드로 마이그레이션
+      if (batchMigrateExisting) {
+        await fetch('/api/saved-queries', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'set-brand',
+            sourceBrand: batchSourceBrand,
+          }),
+        });
+      }
+
+      // 유효한 날짜 치환만 필터링
+      const validDateReplacements = batchDateReplacements.filter(
+        d => d.from.trim() && d.to.trim()
+      );
+
+      const response = await fetch('/api/saved-queries', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'bulk-copy',
+          sourceBrand: batchSourceBrand,
+          targetBrands: batchTargetBrands,
+          dateReplacements: validDateReplacements.length > 0 ? validDateReplacements : undefined,
+          region: region,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '일괄 복사 실패');
+      }
+
+      setBatchResult(data.message);
+      await fetchSavedQueries();
+    } catch (err) {
+      setBatchError(err instanceof Error ? err.message : '알 수 없는 오류');
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
+  // 날짜 일괄 변경만 실행
+  const handleBatchDateUpdate = async () => {
+    const validDateReplacements = batchDateReplacements.filter(
+      d => d.from.trim() && d.to.trim()
+    );
+
+    if (validDateReplacements.length === 0) {
+      setBatchError('변경할 날짜를 입력해주세요.');
+      return;
+    }
+
+    setIsBatchProcessing(true);
+    setBatchError(null);
+    setBatchResult(null);
+
+    try {
+      const response = await fetch('/api/saved-queries', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'bulk-update-dates',
+          dateReplacements: validDateReplacements,
+          region: region,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '날짜 변경 실패');
+      }
+
+      setBatchResult(data.message);
+      await fetchSavedQueries();
+    } catch (err) {
+      setBatchError(err instanceof Error ? err.message : '알 수 없는 오류');
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
+  // 날짜 치환 행 추가/삭제
+  const addDateReplacement = () => {
+    setBatchDateReplacements(prev => [...prev, { from: '', to: '' }]);
+  };
+
+  const removeDateReplacement = (index: number) => {
+    setBatchDateReplacements(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateDateReplacement = (index: number, field: 'from' | 'to', value: string) => {
+    setBatchDateReplacements(prev =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+    );
+  };
+
+  // 현재 지역의 쿼리를 브랜드 필터 적용하여 필터링
+  const filteredSavedQueries = savedQueries.filter(q => {
+    const matchesRegion = q.region === region || !q.region;
+    const matchesBrand = filterBrand === 'all' || q.brand === filterBrand || (!q.brand && filterBrand === 'M');
+    return matchesRegion && matchesBrand;
+  });
+
   return (
     <div className="flex flex-col h-full rounded-xl bg-white border border-gray-200 overflow-hidden card-shadow relative">
       {/* Header */}
@@ -398,18 +544,46 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
             <Save className="w-3.5 h-3.5 mr-1" />
             저장
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setBatchResult(null);
+              setBatchError(null);
+              setShowBatchDialog(true);
+            }}
+            className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
+            title="쿼리 일괄 복사/날짜 변경"
+          >
+            <Settings2 className="w-3.5 h-3.5 mr-1" />
+            일괄작업
+          </Button>
+          {/* Brand Filter */}
+          <Select value={filterBrand} onValueChange={(v) => setFilterBrand(v as BrandCode | 'all')}>
+            <SelectTrigger className="w-[100px] h-8 bg-white border-gray-200 text-gray-700 text-xs">
+              <SelectValue placeholder="브랜드" />
+            </SelectTrigger>
+            <SelectContent className="bg-white border-gray-200">
+              <SelectItem value="all" className="text-gray-700 text-xs">전체 브랜드</SelectItem>
+              {BRAND_CODES.map((b) => (
+                <SelectItem key={b.code} value={b.code} className="text-gray-700 text-xs">
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={selectedQueryId} onValueChange={handleQuerySelect}>
             <SelectTrigger className="w-[160px] h-8 bg-white border-gray-200 text-gray-700 text-xs">
               <SelectValue placeholder="쿼리 선택">{getSelectedLabel()}</SelectValue>
             </SelectTrigger>
             <SelectContent className="bg-white border-gray-200 max-h-[400px]">
-              {savedQueries.filter(q => q.region === region || !q.region).length > 0 && (
+              {filteredSavedQueries.length > 0 && (
                 <>
                   <SelectGroup>
                     <SelectLabel className="text-xs text-gray-500 font-medium">
-                      저장된 쿼리 ({region === 'domestic' ? '🇰🇷 국내' : '🇨🇳 중국'})
+                      저장된 쿼리 ({filterBrand === 'all' ? '전체' : getBrandLabel(filterBrand as BrandCode)})
                     </SelectLabel>
-                    {savedQueries.filter(q => q.region === region || !q.region).map((saved) => (
+                    {filteredSavedQueries.map((saved) => (
                       <div key={saved.id} className="relative group">
                         <SelectItem
                           value={saved.id}
@@ -419,6 +593,11 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
                             <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px]">
                               {getCategoryLabel(saved.category)}
                             </span>
+                            {saved.brand && (
+                              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px]">
+                                {getBrandLabel(saved.brand)}
+                              </span>
+                            )}
                             <span className="flex flex-col">
                               <span>{saved.name}</span>
                               {saved.createdBy && (
@@ -453,7 +632,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
                   ))}
                 </SelectGroup>
               )}
-              {savedQueries.filter(q => q.region === region || !q.region).length === 0 && SAMPLE_QUERY_TEMPLATES.length === 0 && (
+              {filteredSavedQueries.length === 0 && SAMPLE_QUERY_TEMPLATES.length === 0 && (
                 <div className="px-3 py-2 text-xs text-gray-400 text-center">
                   저장된 쿼리가 없습니다
                 </div>
@@ -580,6 +759,24 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
                     {AVAILABLE_REGIONS.map((r) => (
                       <SelectItem key={r.id} value={r.id} className="text-gray-700">
                         <span className="flex items-center gap-2">{r.emoji} {r.name}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm text-gray-600 mb-1.5 block">브랜드</label>
+                <Select value={selectedSaveBrand} onValueChange={(v) => setSelectedSaveBrand(v as BrandCode)}>
+                  <SelectTrigger className="bg-white border-gray-200 text-gray-900">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-gray-200">
+                    {BRAND_CODES.map((b) => (
+                      <SelectItem key={b.code} value={b.code} className="text-gray-700">
+                        <span className="flex items-center gap-2">
+                          <span className="text-xs text-gray-400">[{b.code}]</span>
+                          {b.name}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -813,6 +1010,235 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
                   <>
                     <Sparkles className="w-4 h-4 mr-2" />
                     쿼리 생성하기
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Operations Dialog */}
+      {showBatchDialog && (
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
+          <div className="bg-white border border-gray-200 rounded-xl p-5 w-[520px] max-h-[90vh] shadow-xl flex flex-col">
+            <div className="flex items-center justify-between mb-4 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                  <Settings2 className="w-4 h-4 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">쿼리 일괄 작업</h3>
+                  <p className="text-xs text-gray-500">브랜드 복사 및 날짜 조건 일괄 변경</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowBatchDialog(false)}
+                className="text-gray-400 hover:text-gray-600 h-8 w-8 p-0"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-5">
+              {/* Section 1: Brand Copy */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
+                <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                  <Copy className="w-4 h-4 text-blue-500" />
+                  브랜드별 쿼리 복사
+                </h4>
+                <p className="text-xs text-gray-500 mb-3">
+                  소스 브랜드의 쿼리를 선택한 브랜드로 복사합니다. SQL 내 <code className="bg-gray-200 px-1 rounded">brd_cd</code> 값이 자동으로 치환됩니다.
+                </p>
+
+                {/* Migrate existing queries checkbox */}
+                <label className="flex items-center gap-2 mb-3 p-2 bg-amber-50 border border-amber-200 rounded-lg cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={batchMigrateExisting}
+                    onChange={(e) => setBatchMigrateExisting(e.target.checked)}
+                    className="w-4 h-4 text-amber-600 rounded border-gray-300"
+                  />
+                  <span className="text-xs text-amber-800">
+                    브랜드 미설정 쿼리를 소스 브랜드로 자동 설정 (기존 MLB 쿼리 마이그레이션)
+                  </span>
+                </label>
+
+                {/* Source Brand */}
+                <div className="mb-3">
+                  <label className="text-xs text-gray-600 mb-1 block">소스 브랜드</label>
+                  <Select value={batchSourceBrand} onValueChange={(v) => setBatchSourceBrand(v as BrandCode)}>
+                    <SelectTrigger className="bg-white border-gray-200 text-gray-900 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-gray-200">
+                      {BRAND_CODES.map((b) => (
+                        <SelectItem key={b.code} value={b.code} className="text-gray-700">
+                          <span className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400">[{b.code}]</span>
+                            {b.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Target Brands */}
+                <div className="mb-3">
+                  <label className="text-xs text-gray-600 mb-1 block">
+                    대상 브랜드 <span className="text-gray-400">(복수 선택 가능)</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {BRAND_CODES.filter(b => b.code !== batchSourceBrand).map((b) => {
+                      const isSelected = batchTargetBrands.includes(b.code);
+                      return (
+                        <button
+                          key={b.code}
+                          onClick={() => {
+                            setBatchTargetBrands(prev =>
+                              isSelected
+                                ? prev.filter(c => c !== b.code)
+                                : [...prev, b.code]
+                            );
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                            isSelected
+                              ? 'bg-blue-50 border-blue-300 text-blue-700'
+                              : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                          }`}
+                        >
+                          <span className="text-gray-400 mr-1">[{b.code}]</span>
+                          {b.name}
+                          {isSelected && <Check className="w-3 h-3 ml-1 inline" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {batchTargetBrands.length > 0 && (
+                    <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
+                      <ArrowRight className="w-3 h-3" />
+                      <span className="text-gray-400">[{batchSourceBrand}]</span>
+                      <span>{getBrandLabel(batchSourceBrand)}</span>
+                      <ArrowRight className="w-3 h-3 mx-1" />
+                      {batchTargetBrands.map((code, i) => (
+                        <span key={code}>
+                          {i > 0 && ', '}
+                          <span className="text-blue-600">[{code}] {getBrandLabel(code)}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Section 2: Date Replacement */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
+                <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 text-green-500" />
+                  날짜 조건 변경
+                </h4>
+                <p className="text-xs text-gray-500 mb-3">
+                  SQL 쿼리 내 날짜 문자열을 찾아 일괄 치환합니다. 복사 시 함께 적용되거나, 기존 쿼리에 단독 적용할 수 있습니다.
+                </p>
+                <div className="text-xs text-gray-400 mb-3 bg-white border border-gray-200 rounded-lg p-2">
+                  <span className="font-medium text-gray-500">예시:</span>
+                  <div className="mt-1 space-y-0.5">
+                    <div>&apos;202512&apos; → &apos;202601&apos; (월 변경)</div>
+                    <div>&apos;2025-12&apos; → &apos;2026-01&apos; (하이픈 형식)</div>
+                    <div>&apos;20251231&apos; → &apos;20260131&apos; (일 변경)</div>
+                    <div>&apos;2025&apos; → &apos;2026&apos; (연도 변경)</div>
+                  </div>
+                </div>
+
+                {batchDateReplacements.map((item, index) => (
+                  <div key={index} className="flex items-center gap-2 mb-2">
+                    <Input
+                      value={item.from}
+                      onChange={(e) => updateDateReplacement(index, 'from', e.target.value)}
+                      placeholder="찾을 값 (예: 202512)"
+                      className="flex-1 bg-white border-gray-200 text-gray-900 h-9 text-sm"
+                    />
+                    <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <Input
+                      value={item.to}
+                      onChange={(e) => updateDateReplacement(index, 'to', e.target.value)}
+                      placeholder="바꿀 값 (예: 202601)"
+                      className="flex-1 bg-white border-gray-200 text-gray-900 h-9 text-sm"
+                    />
+                    {batchDateReplacements.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeDateReplacement(index)}
+                        className="text-gray-400 hover:text-red-500 h-8 w-8 p-0 flex-shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={addDateReplacement}
+                  className="text-gray-500 hover:text-gray-700 text-xs mt-1"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  치환 규칙 추가
+                </Button>
+              </div>
+
+              {/* Result/Error Messages */}
+              {batchResult && (
+                <div className="px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2">
+                  <Check className="w-4 h-4" />
+                  {batchResult}
+                </div>
+              )}
+              {batchError && (
+                <div className="px-3 py-2 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm">
+                  {batchError}
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex-shrink-0 pt-4 mt-4 border-t border-gray-100 flex gap-2">
+              <Button
+                onClick={handleBatchCopy}
+                disabled={isBatchProcessing || batchTargetBrands.length === 0}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {isBatchProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    처리 중...
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 mr-2" />
+                    브랜드 복사 실행
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={handleBatchDateUpdate}
+                disabled={isBatchProcessing || batchDateReplacements.every(d => !d.from.trim() || !d.to.trim())}
+                variant="outline"
+                className="flex-1 border-green-300 text-green-700 hover:bg-green-50"
+              >
+                {isBatchProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    처리 중...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    날짜만 변경
                   </>
                 )}
               </Button>

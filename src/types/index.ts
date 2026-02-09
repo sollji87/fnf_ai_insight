@@ -64,12 +64,22 @@ export interface RegionConfig {
   isDefault: boolean; // 기본 국가 여부 (삭제 불가)
 }
 
+// 브랜드 코드 타입
+export type BrandCode = 'M' | 'I' | 'X' | 'V' | 'ST';
+
+// 브랜드 설정 인터페이스
+export interface BrandConfig {
+  code: BrandCode;
+  name: string;
+}
+
 export interface SavedQuery {
   id: string;
   name: string;
   query: string;
   category: 'sales' | 'profit' | 'discount' | 'brand' | 'inventory' | 'hr' | 'custom';
   region: Region;
+  brand?: BrandCode;
   createdAt: string;
   createdBy?: string;
 }
