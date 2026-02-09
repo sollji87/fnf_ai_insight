@@ -985,7 +985,7 @@ ORDER BY total_sales DESC;`);
                         <span className="ml-1.5 text-xs font-normal text-gray-500">
                           ({savedInsights.filter(i => {
                             const matchRegion = (i.region || 'domestic') === selectedRegion;
-                            const matchBrand = selectedBrandFilter === 'all' || (i.brandName || '').toUpperCase().includes(selectedBrandFilter.toUpperCase());
+                            const matchBrand = selectedBrandFilter === 'all' || (i.brandName || '').toUpperCase() === selectedBrandFilter.toUpperCase();
                             return matchRegion && matchBrand;
                           }).length}개)
                         </span>
@@ -1034,7 +1034,7 @@ ORDER BY total_sales DESC;`);
                         </div>
                       ) : savedInsights.filter(i => {
                             const matchRegion = (i.region || 'domestic') === selectedRegion;
-                            const matchBrand = selectedBrandFilter === 'all' || (i.brandName || '').toUpperCase().includes(selectedBrandFilter.toUpperCase());
+                            const matchBrand = selectedBrandFilter === 'all' || (i.brandName || '').toUpperCase() === selectedBrandFilter.toUpperCase();
                             return matchRegion && matchBrand;
                           }).length === 0 ? (
                         <div className="text-center py-8">
@@ -1045,7 +1045,7 @@ ORDER BY total_sales DESC;`);
                       ) : (
                         savedInsights.filter(i => {
                             const matchRegion = (i.region || 'domestic') === selectedRegion;
-                            const matchBrand = selectedBrandFilter === 'all' || (i.brandName || '').toUpperCase().includes(selectedBrandFilter.toUpperCase());
+                            const matchBrand = selectedBrandFilter === 'all' || (i.brandName || '').toUpperCase() === selectedBrandFilter.toUpperCase();
                             return matchRegion && matchBrand;
                           }).map((insight) => (
                           <div
