@@ -500,49 +500,42 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
   return (
     <div className="flex flex-col h-full rounded-xl bg-white border border-gray-200 overflow-hidden card-shadow relative">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-md bg-gray-900 flex items-center justify-center">
-            <Database className="w-3.5 h-3.5 text-white" />
+      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50/50">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="w-6 h-6 rounded-md bg-gray-900 flex items-center justify-center">
+            <Database className="w-3 h-3 text-white" />
           </div>
-          <span className="font-semibold text-gray-900 text-sm">SQL 쿼리</span>
+          <span className="font-semibold text-gray-900 text-xs">SQL</span>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-0.5 flex-1 justify-end min-w-0">
           <Button
             variant="ghost"
             size="sm"
             onClick={handleOpenAiHelper}
-            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 h-8 text-xs"
+            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 h-7 px-1.5 text-[11px]"
           >
-            <Sparkles className="w-3.5 h-3.5 mr-1" />
-            AI 도우미
+            <Sparkles className="w-3 h-3 mr-0.5" />
+            AI
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={handleCopyQuery}
-            className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
+            className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 h-7 px-1.5 text-[11px]"
           >
             {copied ? (
-              <>
-                <Check className="w-3.5 h-3.5 mr-1 text-green-600" />
-                <span className="text-green-600">복사됨</span>
-              </>
+              <Check className="w-3 h-3 text-green-600" />
             ) : (
-              <>
-                <Copy className="w-3.5 h-3.5 mr-1" />
-                복사
-              </>
+              <Copy className="w-3 h-3" />
             )}
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setShowSaveDialog(true)}
-            className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
+            className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 h-7 px-1.5 text-[11px]"
           >
-            <Save className="w-3.5 h-3.5 mr-1" />
-            저장
+            <Save className="w-3 h-3" />
           </Button>
           <Button
             variant="ghost"
@@ -552,19 +545,18 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
               setBatchError(null);
               setShowBatchDialog(true);
             }}
-            className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 h-8 text-xs"
+            className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 h-7 px-1.5 text-[11px]"
             title="쿼리 일괄 복사/날짜 변경"
           >
-            <Settings2 className="w-3.5 h-3.5 mr-1" />
-            일괄작업
+            <Settings2 className="w-3 h-3" />
           </Button>
           {/* Brand Filter */}
           <Select value={filterBrand} onValueChange={(v) => setFilterBrand(v as BrandCode | 'all')}>
-            <SelectTrigger className="w-[100px] h-8 bg-white border-gray-200 text-gray-700 text-xs">
+            <SelectTrigger className="w-[80px] h-7 bg-white border-gray-200 text-gray-700 text-[11px] px-2">
               <SelectValue placeholder="브랜드" />
             </SelectTrigger>
             <SelectContent className="bg-white border-gray-200">
-              <SelectItem value="all" className="text-gray-700 text-xs">전체 브랜드</SelectItem>
+              <SelectItem value="all" className="text-gray-700 text-xs">전체</SelectItem>
               {BRAND_CODES.map((b) => (
                 <SelectItem key={b.code} value={b.code} className="text-gray-700 text-xs">
                   {b.name}
@@ -573,7 +565,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
             </SelectContent>
           </Select>
           <Select value={selectedQueryId} onValueChange={handleQuerySelect}>
-            <SelectTrigger className="w-[160px] h-8 bg-white border-gray-200 text-gray-700 text-xs">
+            <SelectTrigger className="w-[120px] h-7 bg-white border-gray-200 text-gray-700 text-[11px] px-2 truncate">
               <SelectValue placeholder="쿼리 선택">{getSelectedLabel()}</SelectValue>
             </SelectTrigger>
             <SelectContent className="bg-white border-gray-200 max-h-[400px]">
