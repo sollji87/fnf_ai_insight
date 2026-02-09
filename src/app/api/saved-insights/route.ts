@@ -170,6 +170,185 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// 브랜드 코드 매핑
+const BRAND_MAP: Record<string, { code: string; name: string }> = {
+  M: { code: 'M', name: 'MLB' },
+  I: { code: 'I', name: 'MLB KIDS' },
+  X: { code: 'X', name: 'DISCOVERY' },
+  V: { code: 'V', name: 'DUVETICA' },
+  ST: { code: 'ST', name: 'SERGIO TACCHINI' },
+};
+
+// 정규식 특수문자 이스케이프
+const escapeRegex = (str: string): string => {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+// 텍스트 내 브랜드명 치환
+const replaceBrandName = (text: string, sourceName: string, targetName: string): string => {
+  if (!text) return text;
+  const pattern = new RegExp(escapeRegex(sourceName), 'gi');
+  return text.replace(pattern, targetName);
+};
+
+// SQL 쿼리 내 brd_cd 치환
+const replaceBrandCode = (queryStr: string, sourceCode: string, targetCode: string): string => {
+  if (!queryStr) return queryStr;
+  // brd_cd = 'M' 패턴 치환
+  const singlePattern = new RegExp(
+    `(brd_cd\\s*=\\s*')${escapeRegex(sourceCode)}(')`,
+    'gi'
+  );
+  let result = queryStr.replace(singlePattern, `$1${targetCode}$2`);
+  // IN 절 내 값 치환
+  const inValuePattern = new RegExp(`'${escapeRegex(sourceCode)}'`, 'g');
+  result = result.replace(inValuePattern, `'${targetCode}'`);
+  return result;
+};
+
+// 인사이트 브랜드별 일괄 복사
+export async function PUT(request: NextRequest) {
+  try {
+    const redis = getRedis();
+    if (!redis) {
+      return NextResponse.json(
+        { error: 'Redis가 설정되지 않았습니다.' },
+        { status: 500 }
+      );
+    }
+
+    const { action, sourceBrand, targetBrands, insightIds, dateReplacements } = await request.json();
+
+    if (action !== 'bulk-copy') {
+      return NextResponse.json(
+        { error: '유효하지 않은 action입니다.' },
+        { status: 400 }
+      );
+    }
+
+    if (!sourceBrand || !targetBrands || targetBrands.length === 0) {
+      return NextResponse.json(
+        { error: '소스 브랜드와 대상 브랜드를 지정해주세요.' },
+        { status: 400 }
+      );
+    }
+
+    const sourceBrandInfo = BRAND_MAP[sourceBrand];
+    if (!sourceBrandInfo) {
+      return NextResponse.json(
+        { error: '유효하지 않은 소스 브랜드 코드입니다.' },
+        { status: 400 }
+      );
+    }
+
+    let insights = await redis.get<SavedInsight[]>(INSIGHTS_KEY) || [];
+
+    // 복사 대상 인사이트 필터링
+    const sourceInsights = insightIds && insightIds.length > 0
+      ? insights.filter(i => insightIds.includes(i.id))
+      : insights.filter(i => {
+          const name = (i.brandName || '').toUpperCase();
+          return name.includes(sourceBrandInfo.name.toUpperCase());
+        });
+
+    if (sourceInsights.length === 0) {
+      return NextResponse.json(
+        { error: `${sourceBrandInfo.name} 브랜드의 인사이트가 없습니다.` },
+        { status: 400 }
+      );
+    }
+
+    const newInsights: SavedInsight[] = [];
+
+    for (const targetCode of targetBrands as string[]) {
+      const targetBrandInfo = BRAND_MAP[targetCode];
+      if (!targetBrandInfo) continue;
+
+      // 이미 해당 브랜드로 복사된 것이 있는지 중복 체크
+      const existingTitles = insights
+        .filter(i => (i.brandName || '').toUpperCase().includes(targetBrandInfo.name.toUpperCase()))
+        .map(i => i.title);
+
+      for (const source of sourceInsights) {
+        // 제목에서 브랜드명 치환
+        const newTitle = replaceBrandName(source.title, sourceBrandInfo.name, targetBrandInfo.name);
+        
+        // 동일 제목 중복 체크
+        if (existingTitles.includes(newTitle)) continue;
+
+        // 분석 요청 프롬프트에서 브랜드명 치환
+        const newAnalysisRequest = replaceBrandName(
+          source.analysisRequest || '',
+          sourceBrandInfo.name,
+          targetBrandInfo.name
+        );
+
+        // SQL 쿼리에서 브랜드 코드 + 브랜드명 치환
+        let newQuery = source.query || '';
+        if (newQuery) {
+          newQuery = replaceBrandCode(newQuery, sourceBrandInfo.code, targetBrandInfo.code);
+          newQuery = replaceBrandName(newQuery, sourceBrandInfo.name, targetBrandInfo.name);
+        }
+
+        // 날짜 치환 (제공된 경우)
+        if (dateReplacements && dateReplacements.length > 0) {
+          for (const { from, to } of dateReplacements) {
+            if (from && to) {
+              if (newQuery) newQuery = newQuery.split(from).join(to);
+              // analysisRequest에도 날짜 치환 적용
+            }
+          }
+        }
+
+        newInsights.push({
+          id: `insight-${Date.now()}-${targetCode}-${Math.random().toString(36).substring(2, 7)}`,
+          title: newTitle,
+          brandName: targetBrandInfo.name,
+          insight: `[${targetBrandInfo.name}용으로 복사됨 - 재생성 필요]\n\n` +
+            replaceBrandName(source.insight || '', sourceBrandInfo.name, targetBrandInfo.name),
+          query: newQuery || undefined,
+          analysisRequest: newAnalysisRequest || undefined,
+          tokensUsed: 0,
+          model: source.model || 'copied',
+          region: source.region || 'domestic',
+          createdAt: new Date().toISOString(),
+          createdBy: `일괄복사 (${sourceBrandInfo.name} → ${targetBrandInfo.name})`,
+        });
+      }
+    }
+
+    if (newInsights.length === 0) {
+      return NextResponse.json({
+        success: true,
+        copiedCount: 0,
+        message: '복사할 새로운 인사이트가 없습니다. (이미 복사된 항목이거나 대상이 없습니다)',
+      });
+    }
+
+    // 새 인사이트를 앞에 추가
+    insights = [...newInsights, ...insights];
+
+    // 최대 200개로 제한
+    if (insights.length > 200) {
+      insights = insights.slice(0, 200);
+    }
+
+    await redis.set(INSIGHTS_KEY, insights);
+
+    return NextResponse.json({
+      success: true,
+      copiedCount: newInsights.length,
+      message: `${newInsights.length}개의 인사이트(프롬프트)가 복사되었습니다.`,
+    });
+  } catch (error) {
+    console.error('Redis Error:', error);
+    return NextResponse.json(
+      { error: '일괄 복사 중 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
 // 인사이트 업데이트
 export async function PATCH(request: NextRequest) {
   try {

@@ -33,9 +33,12 @@ import {
   Undo2,
   Trash,
   ArrowLeft,
+  ArrowRight,
+  Settings2,
 } from 'lucide-react';
-import { SAMPLE_BRANDS, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE, AVAILABLE_REGIONS } from '@/lib/prompts';
-import type { BrandInsight, InsightResponse, SavedInsight, RegionId } from '@/types';
+import { SAMPLE_BRANDS, SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE, AVAILABLE_REGIONS, BRAND_CODES } from '@/lib/prompts';
+import type { BrandInsight, InsightResponse, SavedInsight, RegionId, BrandCode } from '@/types';
+import { Input } from '@/components/ui/input';
 
 interface BrandSummaryProps {
   onClose: () => void;
@@ -116,6 +119,18 @@ ORDER BY total_sales DESC;`);
   const [isLoadingTrash, setIsLoadingTrash] = useState(false);
   const [restoringIds, setRestoringIds] = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+  // 인사이트 일괄 복사 상태
+  const [showInsightBatchDialog, setShowInsightBatchDialog] = useState(false);
+  const [insightBatchSource, setInsightBatchSource] = useState<BrandCode>('M');
+  const [insightBatchTargets, setInsightBatchTargets] = useState<BrandCode[]>([]);
+  const [insightBatchDateReplacements, setInsightBatchDateReplacements] = useState<Array<{ from: string; to: string }>>([
+    { from: '', to: '' },
+  ]);
+  const [isInsightBatchProcessing, setIsInsightBatchProcessing] = useState(false);
+  const [insightBatchResult, setInsightBatchResult] = useState<string | null>(null);
+  const [insightBatchError, setInsightBatchError] = useState<string | null>(null);
+  const [insightBatchUseSelected, setInsightBatchUseSelected] = useState(false);
 
   // 외부 소스 상태
   const [externalSources, setExternalSources] = useState<ExternalSource[]>([]);
@@ -407,6 +422,49 @@ ORDER BY total_sales DESC;`);
       alert('저장에 실패했습니다.');
     } finally {
       setIsSavingInsight(false);
+    }
+  };
+
+  // 인사이트 일괄 복사 실행
+  const handleInsightBatchCopy = async () => {
+    if (insightBatchTargets.length === 0) {
+      setInsightBatchError('대상 브랜드를 하나 이상 선택해주세요.');
+      return;
+    }
+
+    setIsInsightBatchProcessing(true);
+    setInsightBatchError(null);
+    setInsightBatchResult(null);
+
+    try {
+      const validDateReplacements = insightBatchDateReplacements.filter(
+        d => d.from.trim() && d.to.trim()
+      );
+
+      const response = await fetch('/api/saved-insights', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'bulk-copy',
+          sourceBrand: insightBatchSource,
+          targetBrands: insightBatchTargets,
+          insightIds: insightBatchUseSelected && selectedInsights.length > 0 ? selectedInsights : undefined,
+          dateReplacements: validDateReplacements.length > 0 ? validDateReplacements : undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '일괄 복사 실패');
+      }
+
+      setInsightBatchResult(data.message);
+      await fetchSavedInsights();
+    } catch (err) {
+      setInsightBatchError(err instanceof Error ? err.message : '알 수 없는 오류');
+    } finally {
+      setIsInsightBatchProcessing(false);
     }
   };
 
@@ -933,6 +991,19 @@ ORDER BY total_sales DESC;`);
                         </span>
                       </h3>
                       <div className="flex items-center gap-0.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setInsightBatchResult(null);
+                            setInsightBatchError(null);
+                            setShowInsightBatchDialog(true);
+                          }}
+                          className="h-7 w-7 p-0 text-gray-400 hover:text-amber-600"
+                          title="프롬프트 브랜드별 일괄 복사"
+                        >
+                          <Settings2 className="w-3.5 h-3.5" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1612,6 +1683,216 @@ ORDER BY total_sales DESC;`);
                 className="text-gray-600 border-gray-200"
               >
                 닫기
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 인사이트 프롬프트 일괄 복사 다이얼로그 */}
+      {showInsightBatchDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-6">
+          <div className="bg-white border border-gray-200 rounded-xl p-5 w-[500px] max-h-[85vh] shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between mb-4 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                  <Settings2 className="w-4 h-4 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">프롬프트 브랜드별 복사</h3>
+                  <p className="text-xs text-gray-500">저장된 인사이트(프롬프트 포함)를 다른 브랜드로 복사</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowInsightBatchDialog(false)}
+                className="text-gray-400 hover:text-gray-600 h-8 w-8 p-0"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4">
+              {/* 복사 범위 선택 */}
+              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={insightBatchUseSelected}
+                    onChange={(e) => setInsightBatchUseSelected(e.target.checked)}
+                    className="w-4 h-4 text-amber-600 rounded border-gray-300"
+                  />
+                  <span className="text-xs text-gray-700">
+                    현재 선택한 인사이트만 복사 ({selectedInsights.length}개 선택됨)
+                  </span>
+                </label>
+                <p className="text-[10px] text-gray-400 mt-1 ml-6">
+                  체크 해제 시 소스 브랜드의 모든 인사이트를 복사합니다
+                </p>
+              </div>
+
+              {/* 소스 브랜드 */}
+              <div>
+                <label className="text-xs text-gray-600 mb-1.5 block font-medium">소스 브랜드</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {BRAND_CODES.map((b) => (
+                    <button
+                      key={b.code}
+                      onClick={() => setInsightBatchSource(b.code)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                        insightBatchSource === b.code
+                          ? 'bg-gray-900 text-white border-gray-900'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <span className="text-gray-400 mr-1">[{b.code}]</span>
+                      {b.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 대상 브랜드 */}
+              <div>
+                <label className="text-xs text-gray-600 mb-1.5 block font-medium">
+                  대상 브랜드 <span className="text-gray-400 font-normal">(복수 선택 가능)</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {BRAND_CODES.filter(b => b.code !== insightBatchSource).map((b) => {
+                    const isSelected = insightBatchTargets.includes(b.code);
+                    return (
+                      <button
+                        key={b.code}
+                        onClick={() => {
+                          setInsightBatchTargets(prev =>
+                            isSelected
+                              ? prev.filter(c => c !== b.code)
+                              : [...prev, b.code]
+                          );
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                          isSelected
+                            ? 'bg-blue-50 border-blue-300 text-blue-700'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <span className="text-gray-400 mr-1">[{b.code}]</span>
+                        {b.name}
+                        {isSelected && <Check className="w-3 h-3 ml-1 inline" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                {insightBatchTargets.length > 0 && (
+                  <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
+                    <ArrowRight className="w-3 h-3" />
+                    <span>{BRAND_CODES.find(b => b.code === insightBatchSource)?.name}</span>
+                    <ArrowRight className="w-3 h-3 mx-1" />
+                    {insightBatchTargets.map((code, i) => (
+                      <span key={code}>
+                        {i > 0 && ', '}
+                        <span className="text-blue-600">{BRAND_CODES.find(b => b.code === code)?.name}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 복사 대상 설명 */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-xs text-blue-800 font-medium mb-1">복사 시 자동 치환 항목:</p>
+                <ul className="text-[11px] text-blue-700 space-y-0.5 ml-3 list-disc">
+                  <li>제목 내 브랜드명</li>
+                  <li>분석 요청 프롬프트 내 브랜드명</li>
+                  <li>SQL 쿼리 내 <code className="bg-blue-100 px-1 rounded">brd_cd</code> 값 및 브랜드명</li>
+                  <li>인사이트 본문 내 브랜드명</li>
+                </ul>
+              </div>
+
+              {/* 날짜 치환 (선택) */}
+              <div>
+                <label className="text-xs text-gray-600 mb-1.5 block font-medium flex items-center gap-1">
+                  <RefreshCw className="w-3 h-3 text-green-500" />
+                  날짜 조건 변경 <span className="text-gray-400 font-normal">(선택)</span>
+                </label>
+                {insightBatchDateReplacements.map((item, index) => (
+                  <div key={index} className="flex items-center gap-2 mb-2">
+                    <Input
+                      value={item.from}
+                      onChange={(e) => {
+                        setInsightBatchDateReplacements(prev =>
+                          prev.map((d, i) => i === index ? { ...d, from: e.target.value } : d)
+                        );
+                      }}
+                      placeholder="찾을 값 (예: 202512)"
+                      className="flex-1 bg-white border-gray-200 text-gray-900 h-8 text-xs"
+                    />
+                    <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <Input
+                      value={item.to}
+                      onChange={(e) => {
+                        setInsightBatchDateReplacements(prev =>
+                          prev.map((d, i) => i === index ? { ...d, to: e.target.value } : d)
+                        );
+                      }}
+                      placeholder="바꿀 값 (예: 202601)"
+                      className="flex-1 bg-white border-gray-200 text-gray-900 h-8 text-xs"
+                    />
+                    {insightBatchDateReplacements.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setInsightBatchDateReplacements(prev => prev.filter((_, i) => i !== index))}
+                        className="text-gray-400 hover:text-red-500 h-7 w-7 p-0 flex-shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setInsightBatchDateReplacements(prev => [...prev, { from: '', to: '' }])}
+                  className="text-gray-500 hover:text-gray-700 text-xs"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  치환 규칙 추가
+                </Button>
+              </div>
+
+              {/* 결과/에러 메시지 */}
+              {insightBatchResult && (
+                <div className="px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2">
+                  <Check className="w-4 h-4" />
+                  {insightBatchResult}
+                </div>
+              )}
+              {insightBatchError && (
+                <div className="px-3 py-2 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm">
+                  {insightBatchError}
+                </div>
+              )}
+            </div>
+
+            {/* 실행 버튼 */}
+            <div className="flex-shrink-0 pt-4 mt-4 border-t border-gray-100">
+              <Button
+                onClick={handleInsightBatchCopy}
+                disabled={isInsightBatchProcessing || insightBatchTargets.length === 0}
+                className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                {isInsightBatchProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    복사 중...
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 mr-2" />
+                    {insightBatchTargets.length}개 브랜드로 복사 실행
+                  </>
+                )}
               </Button>
             </div>
           </div>
