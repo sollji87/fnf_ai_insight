@@ -22,6 +22,7 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
   const [saveTitle, setSaveTitle] = useState('');
   const [saveBrandName, setSaveBrandName] = useState(brandName || '');
   const [createdBy, setCreatedBy] = useState('');
+  const [saveYearMonth, setSaveYearMonth] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -91,7 +92,8 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
           analysisRequest: analysisRequest,
           tokensUsed: insightResponse?.tokensUsed,
           model: insightResponse?.model,
-          region: region, // 국가 정보 포함
+          region: region,
+          yearMonth: saveYearMonth.trim() || undefined,
           createdBy: createdBy.trim() || '익명',
         }),
       });
@@ -103,6 +105,7 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
           setSaveSuccess(false);
           setSaveTitle('');
           setSaveBrandName('');
+          setSaveYearMonth('');
           setCreatedBy('');
         }, 1500);
       }
@@ -116,6 +119,9 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
   const openSaveDialog = () => {
     setSaveBrandName(brandName || '');
     setSaveTitle(brandName ? `${brandName} 분석 인사이트` : '');
+    // 현재 연월 기본값 (YYYYMM)
+    const now = new Date();
+    setSaveYearMonth(`${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`);
     setShowSaveDialog(true);
   };
 
@@ -314,6 +320,26 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
                       placeholder="예: MLB"
                       className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      연월 (선택)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={saveYearMonth}
+                        onChange={(e) => setSaveYearMonth(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="YYYYMM (예: 202512)"
+                        maxLength={6}
+                        className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                      />
+                      {saveYearMonth.length === 6 && (
+                        <span className="text-xs text-gray-400 flex-shrink-0">
+                          {saveYearMonth.slice(0, 4)}년 {saveYearMonth.slice(4)}월
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
