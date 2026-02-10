@@ -94,6 +94,7 @@ export interface SavedInsight {
   tokensUsed: number;
   model: string;
   region?: RegionId; // 국가/지역 (없으면 'domestic'으로 간주)
+  yearMonth?: string; // 연월 (YYYYMM 형식, 예: '202512')
   createdAt: string;
   createdBy?: string;
   deletedAt?: string; // 휴지통으로 이동된 시각 (소프트 삭제)

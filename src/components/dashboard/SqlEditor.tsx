@@ -86,6 +86,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
   const [batchResult, setBatchResult] = useState<string | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
   const [batchMigrateExisting, setBatchMigrateExisting] = useState(false);
+  const [batchDateBrand, setBatchDateBrand] = useState<BrandCode | 'all'>('all');
   
   // AI Query Helper states
   const [showAiHelper, setShowAiHelper] = useState(false);
@@ -532,6 +533,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
           action: 'bulk-update-dates',
           dateReplacements: validDateReplacements,
           region: region,
+          brand: batchDateBrand !== 'all' ? batchDateBrand : undefined,
         }),
       });
 
@@ -1210,6 +1212,36 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
                 <p className="text-xs text-gray-500 mb-3">
                   SQL 쿼리 내 날짜 문자열을 찾아 일괄 치환합니다. 복사 시 함께 적용되거나, 기존 쿼리에 단독 적용할 수 있습니다.
                 </p>
+                
+                {/* 날짜 변경 대상 브랜드 선택 */}
+                <div className="mb-3">
+                  <label className="text-xs font-medium text-gray-600 mb-1.5 block">대상 브랜드 (날짜만 변경 시)</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => setBatchDateBrand('all')}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all border ${
+                        batchDateBrand === 'all'
+                          ? 'bg-green-600 text-white border-green-600'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'
+                      }`}
+                    >
+                      전체
+                    </button>
+                    {(['M', 'I', 'X', 'V', 'ST'] as BrandCode[]).map((b) => (
+                      <button
+                        key={b}
+                        onClick={() => setBatchDateBrand(b)}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all border ${
+                          batchDateBrand === b
+                            ? 'bg-green-600 text-white border-green-600'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'
+                        }`}
+                      >
+                        {{ M: 'MLB', I: 'MLB KIDS', X: 'DISCOVERY', V: 'DUVETICA', ST: 'SERGIO TACCHINI' }[b]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="text-xs text-gray-400 mb-3 bg-white border border-gray-200 rounded-lg p-2">
                   <span className="font-medium text-gray-500">예시:</span>
                   <div className="mt-1 space-y-0.5">

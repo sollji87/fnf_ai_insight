@@ -207,7 +207,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const { action, sourceBrand, targetBrands, dateReplacements, region } = await request.json();
+    const { action, sourceBrand, targetBrands, dateReplacements, region, brand } = await request.json();
 
     let queries = await redis.get<SavedQuery[]>(QUERIES_KEY) || [];
 
@@ -283,11 +283,11 @@ export async function PUT(request: NextRequest) {
 
     if (action === 'bulk-update-dates') {
       // 특정 브랜드(또는 전체)의 쿼리에서 날짜 일괄 변경
-      const targetBrand = (await request.json()).targetBrand;
+      // brand 파라미터가 있으면 해당 브랜드만, 없으면 전체 쿼리 대상
       let updatedCount = 0;
 
       queries = queries.map(q => {
-        const matchesBrand = !targetBrand || q.brand === targetBrand || (!q.brand && targetBrand === 'M');
+        const matchesBrand = !brand || q.brand === brand || (!q.brand && brand === 'M');
         const matchesRegion = !region || q.region === region || !q.region;
         
         if (matchesBrand && matchesRegion && dateReplacements && dateReplacements.length > 0) {

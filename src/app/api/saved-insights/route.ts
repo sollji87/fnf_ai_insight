@@ -33,6 +33,7 @@ interface SavedInsight {
   tokensUsed: number;
   model: string;
   region?: RegionId; // 국가/지역 (없으면 'domestic'으로 간주)
+  yearMonth?: string; // 연월 (YYYYMM 형식, 예: '202512')
   createdAt: string;
   createdBy?: string;
   deletedAt?: string; // 휴지통 이동 시각
@@ -81,14 +82,19 @@ export async function GET(request: NextRequest) {
     
     let insights = await redis.get<SavedInsight[]>(INSIGHTS_KEY) || [];
     
-    // 기존 인사이트에 region이 없으면 'domestic'으로 마이그레이션
+    // 기존 인사이트에 region이 없으면 'domestic'으로, yearMonth가 없으면 '202512'로 마이그레이션
     let needsMigration = false;
     insights = insights.map(insight => {
-      if (!insight.region) {
+      let updated = insight;
+      if (!updated.region) {
         needsMigration = true;
-        return { ...insight, region: 'domestic' as RegionId };
+        updated = { ...updated, region: 'domestic' as RegionId };
       }
-      return insight;
+      if (!updated.yearMonth) {
+        needsMigration = true;
+        updated = { ...updated, yearMonth: '202512' };
+      }
+      return updated;
     });
     
     // 마이그레이션이 필요하면 저장
@@ -121,7 +127,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { title, brandName, insight, query, analysisRequest, tokensUsed, model, region, createdBy } = await request.json();
+    const { title, brandName, insight, query, analysisRequest, tokensUsed, model, region, createdBy, yearMonth } = await request.json();
 
     if (!title || !insight) {
       return NextResponse.json(
@@ -140,6 +146,7 @@ export async function POST(request: NextRequest) {
       tokensUsed: tokensUsed || 0,
       model: model || 'unknown',
       region: region || 'domestic', // 국가 정보 (기본값: domestic)
+      yearMonth: yearMonth || undefined, // 연월 (YYYYMM)
       createdAt: new Date().toISOString(),
       createdBy: createdBy || '익명',
     };
@@ -311,6 +318,7 @@ export async function PUT(request: NextRequest) {
           tokensUsed: 0,
           model: source.model || 'copied',
           region: source.region || 'domestic',
+          yearMonth: source.yearMonth || '202512', // 연월 유지
           createdAt: new Date().toISOString(),
           createdBy: `일괄복사 (${sourceBrandInfo.name} → ${targetBrandInfo.name})`,
         });
@@ -361,7 +369,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, insight, analysisRequest, title, query, brandName } = body;
+    const { id, insight, analysisRequest, title, query, brandName, yearMonth } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -371,9 +379,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     // 최소 하나의 업데이트 필드가 있어야 함
-    if (!insight && analysisRequest === undefined && !title && !query && !brandName) {
+    if (!insight && analysisRequest === undefined && !title && !query && !brandName && yearMonth === undefined) {
       return NextResponse.json(
-        { error: '업데이트할 필드가 필요합니다. (insight, analysisRequest, title, query, brandName 중 하나 이상)' },
+        { error: '업데이트할 필드가 필요합니다. (insight, analysisRequest, title, query, brandName, yearMonth 중 하나 이상)' },
         { status: 400 }
       );
     }
@@ -395,6 +403,7 @@ export async function PATCH(request: NextRequest) {
     if (title !== undefined) updates.title = title;
     if (query !== undefined) updates.query = query;
     if (brandName !== undefined) updates.brandName = brandName;
+    if (yearMonth !== undefined) updates.yearMonth = yearMonth;
 
     insights[insightIndex] = {
       ...insights[insightIndex],

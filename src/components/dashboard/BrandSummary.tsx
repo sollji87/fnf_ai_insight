@@ -80,6 +80,9 @@ ORDER BY total_sales DESC;`);
   
   // 브랜드 필터 상태
   const [selectedBrandFilter, setSelectedBrandFilter] = useState<string>('all');
+  
+  // 연월 필터 상태 (YYYYMM 형식)
+  const [selectedYearMonth, setSelectedYearMonth] = useState<string>('202512');
 
   // 요약 보고서 저장 관련 상태
   const [isSavingReport, setIsSavingReport] = useState(false);
@@ -355,6 +358,8 @@ ORDER BY total_sales DESC;`);
           insight: summary.insight,
           tokensUsed: summary.tokensUsed,
           model: summary.model,
+          region: selectedRegion,
+          yearMonth: selectedYearMonth || undefined,
           createdBy: '시스템',
         }),
       });
@@ -876,6 +881,30 @@ ORDER BY total_sales DESC;`);
                   ))}
                 </div>
 
+                {/* 연월 선택 (브랜드 선택 시 표시) */}
+                {selectedBrandFilter !== 'all' && (
+                  <div className="flex items-center gap-2 mb-3">
+                    <label className="text-[11px] font-medium text-gray-500 flex-shrink-0">연월</label>
+                    <input
+                      type="text"
+                      value={selectedYearMonth}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/\D/g, '').slice(0, 6);
+                        setSelectedYearMonth(v);
+                        setSelectedInsights([]);
+                      }}
+                      placeholder="YYYYMM"
+                      maxLength={6}
+                      className="flex-1 h-7 px-2 text-xs border border-gray-200 rounded-md bg-white text-gray-900 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+                    />
+                    {selectedYearMonth.length === 6 && (
+                      <span className="text-[10px] text-gray-400 flex-shrink-0">
+                        {selectedYearMonth.slice(0, 4)}년 {selectedYearMonth.slice(4)}월
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {/* 저장된 인사이트 모드 */}
                 {showTrash ? (
                   <>
@@ -987,7 +1016,8 @@ ORDER BY total_sales DESC;`);
                           ({savedInsights.filter(i => {
                             const matchRegion = (i.region || 'domestic') === selectedRegion;
                             const matchBrand = selectedBrandFilter === 'all' || (i.brandName || '').toUpperCase() === selectedBrandFilter.toUpperCase();
-                            return matchRegion && matchBrand;
+                            const matchYearMonth = selectedBrandFilter === 'all' || !selectedYearMonth || selectedYearMonth.length !== 6 || (i.yearMonth || '202512') === selectedYearMonth;
+                            return matchRegion && matchBrand && matchYearMonth;
                           }).length}개)
                         </span>
                       </h3>
@@ -1036,7 +1066,8 @@ ORDER BY total_sales DESC;`);
                       ) : savedInsights.filter(i => {
                             const matchRegion = (i.region || 'domestic') === selectedRegion;
                             const matchBrand = selectedBrandFilter === 'all' || (i.brandName || '').toUpperCase() === selectedBrandFilter.toUpperCase();
-                            return matchRegion && matchBrand;
+                            const matchYearMonth = selectedBrandFilter === 'all' || !selectedYearMonth || selectedYearMonth.length !== 6 || (i.yearMonth || '202512') === selectedYearMonth;
+                            return matchRegion && matchBrand && matchYearMonth;
                           }).length === 0 ? (
                         <div className="text-center py-8">
                           <FileText className="w-8 h-8 mx-auto text-gray-300 mb-2" />
@@ -1047,7 +1078,8 @@ ORDER BY total_sales DESC;`);
                         savedInsights.filter(i => {
                             const matchRegion = (i.region || 'domestic') === selectedRegion;
                             const matchBrand = selectedBrandFilter === 'all' || (i.brandName || '').toUpperCase() === selectedBrandFilter.toUpperCase();
-                            return matchRegion && matchBrand;
+                            const matchYearMonth = selectedBrandFilter === 'all' || !selectedYearMonth || selectedYearMonth.length !== 6 || (i.yearMonth || '202512') === selectedYearMonth;
+                            return matchRegion && matchBrand && matchYearMonth;
                           }).map((insight) => (
                           <div
                             key={insight.id}
@@ -1069,7 +1101,7 @@ ORDER BY total_sales DESC;`);
                                 </span>
                               )}
                               <p className="text-[10px] text-gray-400 mt-1">
-                                {new Date(insight.createdAt).toLocaleDateString('ko-KR')} · {insight.createdBy}
+                                {insight.yearMonth ? `${insight.yearMonth.slice(0,4)}.${insight.yearMonth.slice(4)}` : ''} · {insight.createdBy}
                               </p>
                             </div>
                             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
