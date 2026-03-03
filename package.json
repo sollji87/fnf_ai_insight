@@ -11,7 +11,11 @@
     "prompts:fix": "node scripts/audit-fix-saved-prompts.mjs --apply",
     "prompts:review-a4": "node scripts/review-query-prompts-a4.mjs",
     "prompts:generate-query-defaults": "node scripts/generate-query-default-prompts.mjs",
-    "prompts:generate-query-defaults:apply": "node scripts/generate-query-default-prompts.mjs --apply"
+    "prompts:generate-query-defaults:apply": "node scripts/generate-query-default-prompts.mjs --apply",
+    "prompts:sync-brand": "node scripts/sync-brand-prompts-from-insights.mjs",
+    "prompts:sync-brand:apply": "node scripts/sync-brand-prompts-from-insights.mjs --apply",
+    "prompts:link-from-final": "node scripts/link-query-prompts-from-final-insights.mjs",
+    "prompts:link-from-final:apply": "node scripts/link-query-prompts-from-final-insights.mjs --apply"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
