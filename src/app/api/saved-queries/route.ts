@@ -36,6 +36,7 @@ interface SavedQuery {
   id: string;
   name: string;
   query: string;
+  analysisRequest?: string;
   category: 'sales' | 'profit' | 'discount' | 'brand' | 'inventory' | 'hr' | 'custom';
   region: Region;
   brand?: BrandCode;
@@ -150,7 +151,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, query, category, createdBy, region, brand } = await request.json();
+    const { name, query, analysisRequest, category, createdBy, region, brand } = await request.json();
 
     if (!name || !query) {
       return NextResponse.json(
@@ -163,6 +164,7 @@ export async function POST(request: NextRequest) {
       id: `shared-${Date.now()}`,
       name,
       query,
+      analysisRequest: analysisRequest || undefined,
       category: category || 'custom',
       region: region || 'domestic',
       brand: brand || undefined,
@@ -255,6 +257,7 @@ export async function PUT(request: NextRequest) {
             id: `shared-${Date.now()}-${targetBrand}-${Math.random().toString(36).substring(2, 7)}`,
             name: targetName,
             query: modifiedQuery,
+            analysisRequest: sourceQuery.analysisRequest || undefined,
             category: sourceQuery.category,
             region: sourceQuery.region,
             brand: targetBrand,
@@ -292,9 +295,13 @@ export async function PUT(request: NextRequest) {
         
         if (matchesBrand && matchesRegion && dateReplacements && dateReplacements.length > 0) {
           const modifiedQuery = replaceDatesInQuery(q.query, dateReplacements);
-          if (modifiedQuery !== q.query) {
+          const modifiedAnalysisRequest = q.analysisRequest
+            ? replaceDatesInQuery(q.analysisRequest, dateReplacements)
+            : q.analysisRequest;
+
+          if (modifiedQuery !== q.query || modifiedAnalysisRequest !== q.analysisRequest) {
             updatedCount++;
-            return { ...q, query: modifiedQuery };
+            return { ...q, query: modifiedQuery, analysisRequest: modifiedAnalysisRequest };
           }
         }
         return q;

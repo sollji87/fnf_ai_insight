@@ -253,6 +253,12 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
     const saved = savedQueries.find((q) => q.id === value);
     if (saved) {
       setQuery(saved.query);
+
+      // 0차: 쿼리에 직접 연결된 analysisRequest 우선 사용
+      if (onAnalysisRequestLoad && saved.analysisRequest?.trim()) {
+        onAnalysisRequestLoad(saved.analysisRequest);
+        return;
+      }
       
       // 매칭되는 인사이트의 analysisRequest 자동 로드 (브랜드 무관)
       if (onAnalysisRequestLoad && cachedInsights.length > 0) {

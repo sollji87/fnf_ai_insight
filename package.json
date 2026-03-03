@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "prompts:audit": "node scripts/audit-fix-saved-prompts.mjs",
-    "prompts:fix": "node scripts/audit-fix-saved-prompts.mjs --apply"
+    "prompts:fix": "node scripts/audit-fix-saved-prompts.mjs --apply",
+    "prompts:review-a4": "node scripts/review-query-prompts-a4.mjs",
+    "prompts:generate-query-defaults": "node scripts/generate-query-default-prompts.mjs",
+    "prompts:generate-query-defaults:apply": "node scripts/generate-query-default-prompts.mjs --apply"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

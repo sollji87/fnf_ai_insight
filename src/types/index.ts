@@ -77,6 +77,7 @@ export interface SavedQuery {
   id: string;
   name: string;
   query: string;
+  analysisRequest?: string;
   category: 'sales' | 'profit' | 'discount' | 'brand' | 'inventory' | 'hr' | 'custom';
   region: Region;
   brand?: BrandCode;
