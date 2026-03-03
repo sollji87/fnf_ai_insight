@@ -47,6 +47,63 @@ interface SavedInsightRef {
   analysisRequest?: string;
 }
 
+function buildRobustFallbackAnalysisRequest(savedQuery: SavedQuery): string {
+  const brandMap: Record<string, string> = {
+    M: 'MLB',
+    I: 'MLB KIDS',
+    X: 'DISCOVERY',
+    V: 'DUVETICA',
+    ST: 'SERGIO TACCHINI',
+  };
+  const brandCode = savedQuery.brand || 'M';
+  const brandName = brandMap[brandCode] || '브랜드';
+  const topic = savedQuery.name || '성과 분석';
+  const lowerTopic = topic.toLowerCase();
+
+  const topicHints: string[] = [];
+  if (/할인|d\/c|dc|마크다운/.test(lowerTopic)) {
+    topicHints.push('할인율 변화가 매출/이익에 미친 영향과 과도 할인 구간을 분리한다.');
+  }
+  if (/적자|저수익|deficit|loss/.test(lowerTopic)) {
+    topicHints.push('적자/저수익 대상을 개선 가능 vs 구조적 한계로 분류한다.');
+  }
+  if (/채널|온라인|자사몰|제휴몰|무신사/.test(lowerTopic)) {
+    topicHints.push('채널별 성장률과 수익성(이익률/비용률) 동행 여부를 비교한다.');
+  }
+  if (/재고|판매율|시즌|원가/.test(lowerTopic)) {
+    topicHints.push('재고회전/원가/할인 구조와 수익성 간 상관관계를 점검한다.');
+  }
+  if (topicHints.length === 0) {
+    topicHints.push('핵심 지표 변화와 원인을 정량 근거 중심으로 설명한다.');
+  }
+
+  return [
+    '당신은 패션 리테일 FP&A 시니어 애널리스트입니다.',
+    `분석 주제: ${topic}`,
+    `브랜드: ${brandName} (${brandCode})`,
+    `지역: ${savedQuery.region || 'domestic'}`,
+    '',
+    '기간 기준:',
+    '- 당월: 2026년 2월(202602), 전년 동월: 2025년 2월(202502)',
+    '- 최근 12개월: 202503~202602, 직전 12개월: 202403~202502',
+    '',
+    '핵심 분석 포인트:',
+    ...topicHints.map((x) => `- ${x}`),
+    '- SQL 결과에 있는 수치만 사용하고 과도한 추정은 금지한다.',
+    '- 비용 대비 실판매출/수익성 계산은 ACT_SALE_AMT * 1.1 기준.',
+    '- 금액은 *_MIL_KRW(백만원) 우선, 필요 시 *_KRW(원) 병기.',
+    '',
+    '출력 형식:',
+    '1) Executive Summary (3~5줄)',
+    '2) 핵심 지표 및 변화 요인',
+    '3) 리스크/이상징후',
+    '4) 실행 과제 (즉시/단기)',
+    '5) 데이터 한계 (필요 시)',
+    '',
+    '분량: 한국어 Markdown A4 1페이지 내외',
+  ].join('\n');
+}
+
 interface SqlEditorProps {
   onQueryResult: (result: QueryResult, query: string) => void;
   isLoading: boolean;
@@ -296,7 +353,13 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
         
         if (matchedInsight?.analysisRequest) {
           onAnalysisRequestLoad(matchedInsight.analysisRequest);
+          return;
         }
+      }
+
+      // 4차: 매칭 프롬프트가 없으면 강화형 기본 프롬프트 생성
+      if (onAnalysisRequestLoad) {
+        onAnalysisRequestLoad(buildRobustFallbackAnalysisRequest(saved));
       }
     }
   };

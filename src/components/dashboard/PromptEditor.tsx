@@ -24,8 +24,12 @@ const ANALYSIS_REQUEST_KEY = 'fnf-analysis-request';
 const USER_PROMPT_KEY = 'fnf-user-prompt';
 
 const DEFAULT_ANALYSIS_REQUEST = [
-  '당월(2026년 2월)과 전년동월(2025년 2월) 차이를 중심으로 원인과 리스크를 분석해줘.',
-  '최근 12개월은 2025년 3월~2026년 2월 기준으로 보고, 실행 가능한 액션까지 제시해줘.',
+  '당신은 패션 리테일 FP&A 시니어 애널리스트입니다.',
+  '당월(2026년 2월)과 전년동월(2025년 2월), 최근 12개월(202503~202602) 기준으로 성과를 분석하세요.',
+  '매출/이익/비용/할인/채널 기여도를 분리해 변화 원인과 리스크를 설명하고, 실행 가능한 과제를 제시하세요.',
+  '비용 대비 실판매출/수익성 계산은 ACT_SALE_AMT * 1.1 기준으로 해석하세요.',
+  '금액은 *_MIL_KRW(백만원) 우선, 필요 시 *_KRW(원) 병기하세요.',
+  '출력은 한국어 Markdown으로 작성하고, 분량은 A4 1페이지 내외로 간결하게 정리하세요.',
 ].join('\n');
 
 const DEFAULT_COMMON_PROMPT = `<GUIDELINES>
