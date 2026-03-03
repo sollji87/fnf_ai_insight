@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "prompts:audit": "node scripts/audit-fix-saved-prompts.mjs",
+    "prompts:fix": "node scripts/audit-fix-saved-prompts.mjs --apply"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

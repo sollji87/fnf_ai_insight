@@ -1,53 +1,46 @@
-export const SYSTEM_PROMPT = `당신은 F&F 그룹의 최고 전략 분석가입니다. 다음 원칙을 반드시 준수하세요:
+﻿import type { BrandConfig, RegionConfig } from '@/types';
 
-📊 **분석 원칙**
-- 숫자는 절대 변형하지 말고 원본 그대로 사용
-- 모든 금액은 백만원 단위로 표시 (원본 데이터를 1,000,000으로 나누어 표기)
-- 단위는 백만원, 3자리마다 쉼표 표기
-- ⚠️ **중요: 백만원 단위 표시 시 반드시 정수로 표기하고 소수점을 사용하지 말 것**
-  - 올바른 예: 1,234백만원, 588백만원, 1,378백만원
-  - 잘못된 예: 1,234.56백만원, 588.67백만원, 1,378.0백만원 (절대 사용 금지)
-  - 소수점이 있는 경우 반올림하여 정수로 표기 (예: 588.67 → 589백만원, 1,378.0 → 1,378백만원)
-- 비중(%)은 소수점 첫째자리까지 표현
-- 매출액은 act_sale_amt 컬럼 사용할것 매출액(v+)라고 표현하기
-- 할인율 계산은 act_sale_amt / tag_sale_amt 사용
-- 직접이익률 계산 시 직업이익 / (act_sale_amt/1.1) 사용
-- 영업이익률 계산 시 영업이익 / (act_sale_amt/1.1) 사용
+export const SYSTEM_PROMPT = `You are a senior business analyst for F&F.
 
-🎯 **보고 스타일**
-- 경영관리팀 대상의 전략적 관점
-- 즉시 실행 가능한 구체적 액션플랜 제시
-- 리스크와 기회를 명확히 구분
-- 근거 기반의 객관적 분석
-- 이상징후나 특이사항 언급`;
+Hard rules:
+- Respond in Korean and markdown only.
+- Use only provided data; do not invent numbers.
+- Keep output concise and executive-ready.
+- Monetary priority: *_MIL_KRW (million KRW) > *_KRW.
+- Profitability vs actual sales must use ACT_SALE_AMT * 1.1 basis.
+- Period baseline:
+  - Current month: February 2026 (202602)
+  - YoY month: February 2025 (202502)
+  - Latest 12M: 202503~202602
+  - Prior 12M: 202403~202502
 
-export const COMMON_GUIDELINES = `- 각 섹션의 ai_text는 구체적이고 실용적인 내용으로 작성
-- 숫자는 백만원 단위로 표시하고 절대 변형하지 말 것
-- 불릿 포인트는 마크다운 형식(-, •) 사용 가능
-- 줄바꿈은 반드시 \\n을 사용하여 표시 (예: "첫 번째 줄\\n두 번째 줄")
-- ai_text 내에서 여러 문단이나 항목을 나눌 때는 \\n\\n을 사용
-- 불릿 포인트나 리스트 항목 사이에는 \\n을 사용
-- 반드시 유효한 JSON 형식으로만 응답 (마크다운 코드 블록 없이)`;
+Output:
+1) Executive Summary
+2) Key Metrics and Drivers
+3) Risks / Anomalies
+4) Action Plan
+5) Data Caveats (if needed)`;
 
-export const DEFAULT_USER_PROMPT_TEMPLATE = `아래 데이터를 분석하여 경영 인사이트를 도출해주세요.
+export const COMMON_GUIDELINES = `- One bullet = one idea.
+- Show numbers first, interpretation second.
+- Percentages: one decimal place.
+- Always label current period vs baseline period.
+- Avoid repeating the same metric across sections.
+- If data is insufficient, state it clearly and propose one follow-up query.`;
 
-<데이터>
+export const DEFAULT_USER_PROMPT_TEMPLATE = `Analyze the dataset and write a Korean executive insight report.
+
+<DATA>
 {{DATA}}
-</데이터>
+</DATA>
 
-<분석 요청>
+<ANALYSIS_REQUEST>
 {{ANALYSIS_REQUEST}}
-</분석 요청>
+</ANALYSIS_REQUEST>
 
-<작성 가이드라인>
+<GUIDELINES>
 ${COMMON_GUIDELINES}
-</작성 가이드라인>
-
-위 데이터를 기반으로 다음 내용을 포함하여 마크다운 형식으로 분석해주세요:
-1. 핵심 요약 (3줄 이내)
-2. 주요 지표 분석
-3. 이상징후 및 특이사항
-4. 액션 플랜 제안`;
+</GUIDELINES>`;
 
 export const SAMPLE_QUERY_TEMPLATES: Array<{
   id: string;
@@ -57,7 +50,6 @@ export const SAMPLE_QUERY_TEMPLATES: Array<{
   category: 'sales' | 'profit' | 'discount' | 'brand' | 'custom';
 }> = [];
 
-// 브랜드 목록 - 신규 브랜드 추가 시 담당자가 여기에 직접 추가
 export const SAMPLE_BRANDS = [
   'MLB',
   'MLB KIDS',
@@ -67,9 +59,6 @@ export const SAMPLE_BRANDS = [
   'SUPRA',
 ];
 
-// 브랜드 코드 매핑 (brd_cd 값)
-import type { BrandConfig } from '@/types';
-
 export const BRAND_CODES: BrandConfig[] = [
   { code: 'M', name: 'MLB' },
   { code: 'I', name: 'MLB KIDS' },
@@ -78,17 +67,91 @@ export const BRAND_CODES: BrandConfig[] = [
   { code: 'ST', name: 'SERGIO TACCHINI' },
 ];
 
-// 사용 가능한 국가/지역 목록
-// - isDefault: true인 국가는 기본으로 표시되며 삭제 불가
-// - isDefault: false인 국가는 '+' 버튼으로 추가/삭제 가능
-import type { RegionConfig } from '@/types';
+export interface BrandPromptProfile {
+  code: 'M' | 'I' | 'X' | 'V' | 'ST';
+  name: string;
+  focus: string[];
+}
+
+export const BRAND_PROMPT_PROFILES: Record<BrandPromptProfile['code'], BrandPromptProfile> = {
+  M: {
+    code: 'M',
+    name: 'MLB',
+    focus: [
+      '채널별 성장 대비 이익률(직접이익률/영업이익률) 동행 여부를 우선 점검한다.',
+      '대형 채널/체인에서 할인 확대가 이익 훼손으로 이어지는지 확인한다.',
+      '매출 규모가 큰 SKU/매장 위주로 실행 우선순위를 제시한다.',
+    ],
+  },
+  I: {
+    code: 'I',
+    name: 'MLB KIDS',
+    focus: [
+      '사이즈/재고주수 관점에서 저회전 SKU와 할인 의존 SKU를 분리한다.',
+      '아동 라인 특성상 시즌 전환/학사 시즌 영향 구간의 재고 리스크를 점검한다.',
+      '소량 SKU 과대해석을 피하고, 매출 기여 상위 SKU 중심으로 판단한다.',
+    ],
+  },
+  X: {
+    code: 'X',
+    name: 'DISCOVERY',
+    focus: [
+      '아웃도어/시즌성 품목의 할인-소진 구조와 수익성 균형을 점검한다.',
+      '아울렛/오프프라이스 채널 의존이 본채널 이익률에 미치는 영향을 본다.',
+      '시즌 말 재고 압력으로 인한 마크다운 리스크를 분리해 제시한다.',
+    ],
+  },
+  V: {
+    code: 'V',
+    name: 'DUVETICA',
+    focus: [
+      '고단가 저물량 구조에서 ASP 방어와 할인 통제의 균형을 우선 평가한다.',
+      '소수 핵심 SKU/채널 성과가 전체 손익에 미치는 집중도를 확인한다.',
+      '재고 에이징과 시즌 마감 할인 확대 가능성을 리스크로 분리한다.',
+    ],
+  },
+  ST: {
+    code: 'ST',
+    name: 'SERGIO TACCHINI',
+    focus: [
+      '채널 확장 단계에서 매출 성장과 수익성 확보가 동시에 달성되는지 확인한다.',
+      '프로모션 의존 성장인지 구조적 성장인지를 이익률/할인율로 구분한다.',
+      '확대 가능 채널과 정리 필요 채널을 명확히 나눠 실행 과제를 제시한다.',
+    ],
+  },
+};
+
+export function normalizeBrandCode(brandName?: string | null): BrandPromptProfile['code'] | null {
+  if (!brandName) return null;
+  const raw = brandName.trim().toUpperCase();
+  if (!raw) return null;
+
+  if (['M', 'MLB'].includes(raw)) return 'M';
+  if (['I', 'MK', 'MLB KIDS', 'MLB KDS', 'MLB KDIS'].includes(raw)) return 'I';
+  if (['X', 'DX', 'DISCOVERY'].includes(raw)) return 'X';
+  if (['V', 'DV', 'DUVETICA'].includes(raw)) return 'V';
+  if (['ST', 'SERGIO TACCHINI', 'SERGIO_T', 'SERGIOTACCHINI'].includes(raw)) return 'ST';
+  return null;
+}
+
+export function getBrandPolicyPrompt(brandName?: string | null): string {
+  const code = normalizeBrandCode(brandName);
+  if (!code) return '';
+
+  const profile = BRAND_PROMPT_PROFILES[code];
+  return `
+<Brand Policy>
+- Brand: ${profile.name} (${profile.code})
+${profile.focus.map((line) => `- ${line}`).join('\n')}
+</Brand Policy>
+`.trim();
+}
 
 export const AVAILABLE_REGIONS: RegionConfig[] = [
   { id: 'domestic', name: '국내', emoji: '🇰🇷', isDefault: true },
   { id: 'china', name: '중국', emoji: '🇨🇳', isDefault: true },
-  { id: 'hmt', name: '홍마대', emoji: '🇭🇰', isDefault: false },
+  { id: 'hmt', name: '홍콩/마카오/대만', emoji: '🇭🇰', isDefault: false },
   { id: 'usa', name: '미국', emoji: '🇺🇸', isDefault: false },
 ];
 
-// 기본 활성화 국가 ID 목록
 export const DEFAULT_ACTIVE_REGIONS: string[] = ['domestic', 'china'];

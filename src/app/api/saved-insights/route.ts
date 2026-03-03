@@ -386,7 +386,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    let insights = await redis.get<SavedInsight[]>(INSIGHTS_KEY) || [];
+    const insights = await redis.get<SavedInsight[]>(INSIGHTS_KEY) || [];
     const insightIndex = insights.findIndex((i) => i.id === id);
     
     if (insightIndex === -1) {

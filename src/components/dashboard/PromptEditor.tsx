@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Sparkles, Loader2, RotateCcw, ChevronDown, ChevronUp, Zap, Settings, X, Save } from 'lucide-react';
+import { Sparkles, RotateCcw, ChevronDown, ChevronUp, Zap, Settings, X, Save } from 'lucide-react';
 import { SYSTEM_PROMPT, COMMON_GUIDELINES } from '@/lib/prompts';
 import type { QueryResult, InsightResponse } from '@/types';
 
@@ -23,17 +23,54 @@ const COMMON_PROMPT_KEY = 'fnf-common-prompt';
 const ANALYSIS_REQUEST_KEY = 'fnf-analysis-request';
 const USER_PROMPT_KEY = 'fnf-user-prompt';
 
-const DEFAULT_ANALYSIS_REQUEST = '전반적인 경영 현황을 분석해주세요.';
+const DEFAULT_ANALYSIS_REQUEST = [
+  '당월(2026년 2월)과 전년동월(2025년 2월) 차이를 중심으로 원인과 리스크를 분석해줘.',
+  '최근 12개월은 2025년 3월~2026년 2월 기준으로 보고, 실행 가능한 액션까지 제시해줘.',
+].join('\n');
 
-const DEFAULT_COMMON_PROMPT = `<작성 가이드라인>
+const DEFAULT_COMMON_PROMPT = `<GUIDELINES>
 ${COMMON_GUIDELINES}
-</작성 가이드라인>
+- 당월: 2026년 2월(202602), 전년 동월: 2025년 2월(202502).
+- 최근 12개월: 202503~202602, 직전 12개월: 202403~202502.
+- 비용 대비 실판매출/수익성 계산은 ACT_SALE_AMT * 1.1 기준.
+- 금액은 *_MIL_KRW(백만원) 우선, 필요 시 *_KRW(원) 병기.
+</GUIDELINES>`;
 
-위 데이터를 기반으로 다음 내용을 포함하여 마크다운 형식으로 분석해주세요:
-1. 핵심 요약 (3줄 이내)
-2. 주요 지표 분석
-3. 이상징후 및 특이사항
-4. 액션 플랜 제안`;
+const BRAND_BY_CODE: Record<string, string> = {
+  M: 'MLB',
+  I: 'MLB KIDS',
+  X: 'DISCOVERY',
+  V: 'DUVETICA',
+  ST: 'SERGIO TACCHINI',
+};
+
+function inferBrandNameFromQuery(query: string): string | null {
+  if (!query) return null;
+  const upper = query.toUpperCase();
+
+  const codeMatch = query.match(/brd_cd\s*=\s*'([A-Z]{1,2})'/i);
+  if (codeMatch) {
+    const code = codeMatch[1].toUpperCase();
+    return BRAND_BY_CODE[code] || null;
+  }
+
+  const inMatch = query.match(/brd_cd\s+in\s*\(([^)]+)\)/i);
+  if (inMatch) {
+    const firstCode = (inMatch[1].match(/'([A-Z]{1,2})'/i) || [])[1];
+    if (firstCode) {
+      const code = firstCode.toUpperCase();
+      return BRAND_BY_CODE[code] || null;
+    }
+  }
+
+  if (/MLB\s*KIDS|MLB\s*KDS|MLB\s*KDIS/.test(upper)) return 'MLB KIDS';
+  if (/SERGIO\s*TACCHINI/.test(upper)) return 'SERGIO TACCHINI';
+  if (/DUVETICA/.test(upper)) return 'DUVETICA';
+  if (/DISCOVERY/.test(upper)) return 'DISCOVERY';
+  if (/\bMLB\b/.test(upper)) return 'MLB';
+
+  return null;
+}
 
 export function PromptEditor({
   queryResult,
@@ -53,46 +90,41 @@ export function PromptEditor({
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const [showCommonPromptEditor, setShowCommonPromptEditor] = useState(false);
   const [tempCommonPrompt, setTempCommonPrompt] = useState('');
-  
-  // Refs to avoid infinite loops
+
   const onAnalysisRequestChangeRef = useRef(onAnalysisRequestChange);
   const onGenerateReadyRef = useRef(onGenerateReady);
-  
-  // Update refs when props change
+
   useEffect(() => {
     onAnalysisRequestChangeRef.current = onAnalysisRequestChange;
   }, [onAnalysisRequestChange]);
-  
+
   useEffect(() => {
     onGenerateReadyRef.current = onGenerateReady;
   }, [onGenerateReady]);
 
-  // localStorage에서 저장된 프롬프트 불러오기
   useEffect(() => {
     const storedCommonPrompt = localStorage.getItem(COMMON_PROMPT_KEY);
     if (storedCommonPrompt) {
       setCommonPrompt(storedCommonPrompt);
     }
-    
+
     const storedAnalysisRequest = localStorage.getItem(ANALYSIS_REQUEST_KEY);
     if (storedAnalysisRequest) {
       setAnalysisRequest(storedAnalysisRequest);
     }
-    
+
     const storedUserPrompt = localStorage.getItem(USER_PROMPT_KEY);
     if (storedUserPrompt) {
       setUserPrompt(storedUserPrompt);
     }
   }, []);
 
-  // 외부에서 분석 요청사항이 전달되면 적용
   useEffect(() => {
     if (externalAnalysisRequest && externalAnalysisRequest.trim()) {
       setAnalysisRequest(externalAnalysisRequest);
     }
   }, [externalAnalysisRequest]);
 
-  // 분석 요청사항 자동 저장 및 부모에게 전달
   useEffect(() => {
     localStorage.setItem(ANALYSIS_REQUEST_KEY, analysisRequest);
     if (onAnalysisRequestChangeRef.current) {
@@ -100,7 +132,6 @@ export function PromptEditor({
     }
   }, [analysisRequest]);
 
-  // 추가 요청사항 자동 저장
   useEffect(() => {
     localStorage.setItem(USER_PROMPT_KEY, userPrompt);
   }, [userPrompt]);
@@ -124,14 +155,13 @@ export function PromptEditor({
     setSystemPrompt(SYSTEM_PROMPT);
     setUserPrompt('');
     setAnalysisRequest(DEFAULT_ANALYSIS_REQUEST);
-    // localStorage도 초기화
     localStorage.removeItem(ANALYSIS_REQUEST_KEY);
     localStorage.removeItem(USER_PROMPT_KEY);
   };
 
   const generateInsight = useCallback(async () => {
     if (!queryResult) {
-      setError('먼저 SQL 쿼리를 실행해주세요.');
+      setError('먼저 SQL 쿼리를 실행해 주세요.');
       return;
     }
 
@@ -139,17 +169,19 @@ export function PromptEditor({
     setError(null);
 
     try {
-      const finalUserPrompt = `아래 데이터를 분석하여 경영 인사이트를 도출해주세요.
+      const inferredBrandName = inferBrandNameFromQuery(currentQuery);
 
-<데이터>
+      const finalUserPrompt = `Analyze the dataset and write a Korean executive insight report.
+
+<DATA>
 {{DATA}}
-</데이터>
+</DATA>
 
-<분석 요청>
+<ANALYSIS_REQUEST>
 ${analysisRequest}
-</분석 요청>
+</ANALYSIS_REQUEST>
 
-${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n` : ''}${commonPrompt}`;
+${userPrompt ? `<ADDITIONAL_REQUEST>\n${userPrompt}\n</ADDITIONAL_REQUEST>\n\n` : ''}${commonPrompt}`;
 
       const response = await fetch('/api/insight', {
         method: 'POST',
@@ -159,13 +191,14 @@ ${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n
           systemPrompt,
           userPrompt: finalUserPrompt,
           analysisRequest,
+          brandName: inferredBrandName || undefined,
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || '인사이트 생성 실패');
+        throw new Error(data.error || '인사이트 생성에 실패했습니다.');
       }
 
       onInsightGenerated({
@@ -175,13 +208,12 @@ ${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n
         model: data.model,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : '알 수 없는 오류');
+      setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
   }, [queryResult, currentQuery, systemPrompt, userPrompt, commonPrompt, analysisRequest, setIsLoading, onInsightGenerated]);
 
-  // Expose generateInsight function to parent
   useEffect(() => {
     if (onGenerateReadyRef.current) {
       onGenerateReadyRef.current(generateInsight);
@@ -190,7 +222,6 @@ ${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n
 
   return (
     <div className="flex flex-col h-full rounded-xl bg-white border border-gray-200 overflow-hidden card-shadow relative">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-md bg-gray-900 flex items-center justify-center">
@@ -220,9 +251,7 @@ ${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* System Prompt Toggle */}
         <div>
           <button
             onClick={() => setShowSystemPrompt(!showSystemPrompt)}
@@ -240,12 +269,11 @@ ${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               className="mt-2 min-h-[120px] bg-gray-50 border-gray-200 text-gray-900 text-sm resize-none"
-              placeholder="시스템 프롬프트를 입력하세요..."
+              placeholder="시스템 프롬프트를 입력하세요."
             />
           )}
         </div>
 
-        {/* Analysis Request */}
         <div>
           <Label className="text-sm font-medium text-gray-700 mb-1.5 block">
             <Zap className="w-3.5 h-3.5 inline mr-1 text-amber-500" />
@@ -254,12 +282,11 @@ ${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n
           <Textarea
             value={analysisRequest}
             onChange={(e) => setAnalysisRequest(e.target.value)}
-            className="min-h-[240px] bg-white border-gray-200 text-gray-900 resize-none text-sm"
-            placeholder="분석 요청사항을 입력하세요..."
+            className="min-h-[220px] bg-white border-gray-200 text-gray-900 resize-none text-sm"
+            placeholder="분석 요청사항을 입력하세요."
           />
         </div>
 
-        {/* User Prompt */}
         <div>
           <Label className="text-sm font-medium text-gray-700 mb-1.5 block">
             추가 요청사항 (선택)
@@ -268,11 +295,10 @@ ${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n
             value={userPrompt}
             onChange={(e) => setUserPrompt(e.target.value)}
             className="min-h-[80px] bg-white border-gray-200 text-gray-900 text-sm resize-none"
-            placeholder="추가로 요청할 내용이 있다면 입력하세요... (선택사항)"
+            placeholder="추가 지시사항이 있으면 입력하세요."
           />
         </div>
 
-        {/* Common Prompt Preview */}
         <div className="p-3 rounded-lg bg-gray-50 border border-gray-100">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-500">공통 적용 프롬프트</span>
@@ -284,46 +310,39 @@ ${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n
             </button>
           </div>
           <p className="text-xs text-gray-500 line-clamp-2">
-            {commonPrompt.substring(0, 100)}...
+            {commonPrompt.substring(0, 120)}...
           </p>
         </div>
 
-        {/* Query Status */}
         {queryResult ? (
           <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
             <p className="text-emerald-700 text-sm flex items-center">
               <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2" />
-              쿼리 결과 준비됨: {queryResult.rowCount}개 행, {queryResult.columns.length}개 컬럼
-              <span className="text-emerald-600 ml-2">
-                ({queryResult.executionTime}ms)
-              </span>
+              쿼리 결과 준비됨: {queryResult.rowCount}행, {queryResult.columns.length}컬럼
+              <span className="text-emerald-600 ml-2">({queryResult.executionTime}ms)</span>
             </p>
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-gray-50 border border-gray-100">
-            <p className="text-gray-500 text-sm">
-              SQL 쿼리를 실행하면 데이터가 연결됩니다
-            </p>
+            <p className="text-gray-500 text-sm">SQL 쿼리를 실행하면 결과가 연결됩니다.</p>
           </div>
         )}
       </div>
 
-      {/* Error */}
       {error && (
         <div className="px-4 py-2 bg-red-50 border-t border-red-100 text-red-600 text-sm">
           {error}
         </div>
       )}
 
-      {/* Common Prompt Editor Modal */}
       {showCommonPromptEditor && (
         <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-50">
-          <div className="bg-white border border-gray-200 rounded-xl p-5 w-[500px] max-h-[600px] shadow-xl flex flex-col">
+          <div className="bg-white border border-gray-200 rounded-xl p-5 w-[520px] max-h-[620px] shadow-xl flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-base font-semibold text-gray-900">공통 적용 프롬프트</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  모든 인사이트 생성 시 자동으로 적용됩니다
+                  모든 인사이트 생성 시 자동으로 붙는 공통 지침입니다.
                 </p>
               </div>
               <Button
@@ -335,12 +354,12 @@ ${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n
                 <X className="w-4 h-4" />
               </Button>
             </div>
-            
+
             <Textarea
               value={tempCommonPrompt}
               onChange={(e) => setTempCommonPrompt(e.target.value)}
-              className="flex-1 min-h-[300px] bg-gray-50 border-gray-200 text-gray-900 text-sm resize-none mb-4"
-              placeholder="공통 적용 프롬프트를 입력하세요..."
+              className="flex-1 min-h-[320px] bg-gray-50 border-gray-200 text-gray-900 text-sm resize-none mb-4"
+              placeholder="공통 프롬프트를 입력하세요."
             />
 
             <div className="flex items-center justify-between">
@@ -351,14 +370,15 @@ ${userPrompt ? `<추가 요청사항>\n${userPrompt}\n</추가 요청사항>\n\n
                 className="text-gray-500 hover:text-gray-900"
               >
                 <RotateCcw className="w-4 h-4 mr-1" />
-                기본값으로
+                기본값 복원
               </Button>
               <Button
                 onClick={saveCommonPrompt}
                 className="bg-gray-900 hover:bg-gray-800 text-white"
+                disabled={isLoading}
               >
                 <Save className="w-4 h-4 mr-2" />
-                저장하기
+                저장
               </Button>
             </div>
           </div>

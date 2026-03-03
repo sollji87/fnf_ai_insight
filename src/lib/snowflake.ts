@@ -1,4 +1,4 @@
-import type { QueryResult } from '@/types';
+﻿import type { QueryResult } from '@/types';
 
 interface SnowflakeConnection {
   execute: (options: {
@@ -15,7 +15,7 @@ async function getSnowflakeSDK() {
     try {
       snowflake = await import('snowflake-sdk');
     } catch {
-      throw new Error('Snowflake SDK를 로드할 수 없습니다. 환경 변수를 확인해주세요.');
+      throw new Error('Snowflake SDK瑜?濡쒕뱶?????놁뒿?덈떎. ?섍꼍 蹂?섎? ?뺤씤?댁＜?몄슂.');
     }
   }
   return snowflake;
@@ -36,7 +36,7 @@ export async function createSnowflakeConnection(): Promise<SnowflakeConnection> 
 
     connection.connect((err) => {
       if (err) {
-        reject(new Error(`스노우플레이크 연결 실패: ${err.message}`));
+        reject(new Error(`?ㅻ끂?고뵆?덉씠???곌껐 ?ㅽ뙣: ${err.message}`));
         return;
       }
       resolve(connection as unknown as SnowflakeConnection);
@@ -47,9 +47,9 @@ export async function createSnowflakeConnection(): Promise<SnowflakeConnection> 
 export async function executeQuery(query: string): Promise<QueryResult> {
   const startTime = Date.now();
   
-  // 환경 변수 확인
+  // ?섍꼍 蹂???뺤씤
   if (!process.env.SNOWFLAKE_ACCOUNT || !process.env.SNOWFLAKE_USER) {
-    throw new Error('Snowflake 환경 변수가 설정되지 않았습니다. .env.local 파일을 확인해주세요.');
+    throw new Error('Snowflake ?섍꼍 蹂?섍? ?ㅼ젙?섏? ?딆븯?듬땲?? .env.local ?뚯씪???뺤씤?댁＜?몄슂.');
   }
   
   const connection = await createSnowflakeConnection();
@@ -61,7 +61,7 @@ export async function executeQuery(query: string): Promise<QueryResult> {
         connection.destroy(() => {});
 
         if (err) {
-          reject(new Error(`쿼리 실행 실패: ${err.message}`));
+          reject(new Error(`荑쇰━ ?ㅽ뻾 ?ㅽ뙣: ${err.message}`));
           return;
         }
 
@@ -80,18 +80,69 @@ export async function executeQuery(query: string): Promise<QueryResult> {
   });
 }
 
+
+const MONEY_COLUMN_PATTERN = /(amt|sale|prft|profit|cost|cms|rent|rnt|cogs|margin|revenue|dprft|oprt|gross)/i;
+const LARGE_DATA_ROW_THRESHOLD = 120;
+const LARGE_DATA_BASE_CELL_THRESHOLD = 1800;
+const LARGE_DATA_EXPANDED_CELL_THRESHOLD = 2600;
+
+function isMonetaryColumn(columnName: string): boolean {
+  return MONEY_COLUMN_PATTERN.test(columnName);
+}
+
+function formatMilKrw(value: number): string {
+  return (value / 1_000_000).toLocaleString('ko-KR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+function shouldUseMilOnlyMode(result: QueryResult, monetaryColumnCount: number): boolean {
+  const rowCount = result.rows.length;
+  const baseColumnCount = result.columns.length;
+  const baseCells = rowCount * baseColumnCount;
+  const expandedCells = rowCount * (baseColumnCount + monetaryColumnCount);
+
+  return (
+    rowCount >= LARGE_DATA_ROW_THRESHOLD ||
+    baseCells >= LARGE_DATA_BASE_CELL_THRESHOLD ||
+    expandedCells >= LARGE_DATA_EXPANDED_CELL_THRESHOLD
+  );
+}
+
 export function formatQueryResultForPrompt(result: QueryResult): string {
   if (result.rows.length === 0) {
-    return '데이터가 없습니다.';
+    return '?곗씠?곌? ?놁뒿?덈떎.';
   }
 
-  const headers = result.columns.join(' | ');
-  const separator = result.columns.map(() => '---').join(' | ');
+  const monetaryColumnCount = result.columns.filter(isMonetaryColumn).length;
+  const useMilOnlyMode = shouldUseMilOnlyMode(result, monetaryColumnCount);
+
+  const expandedColumns = result.columns.flatMap((col) => {
+    if (!isMonetaryColumn(col)) {
+      return [{ source: col, label: col, unit: 'plain' as const }];
+    }
+
+    if (useMilOnlyMode) {
+      return [{ source: col, label: `${col}_MIL_KRW`, unit: 'mil' as const }];
+    }
+
+    return [
+      { source: col, label: `${col}_KRW`, unit: 'krw' as const },
+      { source: col, label: `${col}_MIL_KRW`, unit: 'mil' as const },
+    ];
+  });
+
+  const headers = expandedColumns.map((col) => col.label).join(' | ');
+  const separator = expandedColumns.map(() => '---').join(' | ');
   const rows = result.rows
     .map((row) =>
-      '| ' + result.columns.map((col) => {
-        const value = row[col];
+      '| ' + expandedColumns.map((col) => {
+        const value = row[col.source];
         if (typeof value === 'number') {
+          if (col.unit === 'mil') {
+            return formatMilKrw(value);
+          }
           return value.toLocaleString('ko-KR');
         }
         return String(value ?? '');
@@ -99,10 +150,14 @@ export function formatQueryResultForPrompt(result: QueryResult): string {
     )
     .join('\n');
 
-  return `| ${headers} |\n| ${separator} |\n${rows}`;
+  const unitRule = useMilOnlyMode
+    ? '[단위 규칙] 대용량 모드: 금액 컬럼은 *_MIL_KRW(백만원)만 제공 (토큰 절감)'
+    : '[단위 규칙] *_KRW=원, *_MIL_KRW=백만원';
+
+  return `${unitRule}\n\n| ${headers} |\n| ${separator} |\n${rows}`;
 }
 
-// 테이블 목록 가져오기
+// ?뚯씠釉?紐⑸줉 媛?몄삤湲?
 export async function getTableList(): Promise<string[]> {
   const connection = await createSnowflakeConnection();
 
@@ -115,12 +170,12 @@ export async function getTableList(): Promise<string[]> {
         connection.destroy(() => {});
 
         if (err) {
-          reject(new Error(`테이블 목록 조회 실패: ${err.message}`));
+          reject(new Error(`?뚯씠釉?紐⑸줉 議고쉶 ?ㅽ뙣: ${err.message}`));
           return;
         }
 
         const tables = (rows || []).map((row) => {
-          // SHOW TABLES는 'name' 컬럼에 테이블 이름이 있습니다
+          // SHOW TABLES??'name' 而щ읆???뚯씠釉??대쫫???덉뒿?덈떎
           return String(row['name'] || '');
         }).filter(Boolean);
 
@@ -130,7 +185,7 @@ export async function getTableList(): Promise<string[]> {
   });
 }
 
-// 특정 테이블의 스키마 정보 가져오기
+// ?뱀젙 ?뚯씠釉붿쓽 ?ㅽ궎留??뺣낫 媛?몄삤湲?
 export async function getTableSchema(tableName: string): Promise<string> {
   const connection = await createSnowflakeConnection();
 
@@ -143,16 +198,16 @@ export async function getTableSchema(tableName: string): Promise<string> {
         connection.destroy(() => {});
 
         if (err) {
-          reject(new Error(`테이블 스키마 조회 실패: ${err.message}`));
+          reject(new Error(`?뚯씠釉??ㅽ궎留?議고쉶 ?ㅽ뙣: ${err.message}`));
           return;
         }
 
         if (!rows || rows.length === 0) {
-          resolve('테이블 정보를 찾을 수 없습니다.');
+          resolve('?뚯씠釉??뺣낫瑜?李얠쓣 ???놁뒿?덈떎.');
           return;
         }
 
-        // 스키마 정보를 읽기 쉬운 형식으로 변환
+        // ?ㅽ궎留??뺣낫瑜??쎄린 ?ъ슫 ?뺤떇?쇰줈 蹂??
         const schemaText = rows.map((row) => {
           const name = row['name'] || '';
           const type = row['type'] || '';
@@ -161,23 +216,24 @@ export async function getTableSchema(tableName: string): Promise<string> {
           return `  ${name} ${type} ${nullable}${comment}`;
         }).join('\n');
 
-        resolve(`테이블: ${tableName}\n컬럼:\n${schemaText}`);
+        resolve(`?뚯씠釉? ${tableName}\n而щ읆:\n${schemaText}`);
       },
     });
   });
 }
 
-// 여러 테이블의 스키마 정보 가져오기
+// ?щ윭 ?뚯씠釉붿쓽 ?ㅽ궎留??뺣낫 媛?몄삤湲?
 export async function getMultipleTableSchemas(tableNames: string[]): Promise<string> {
   const schemas = await Promise.all(
     tableNames.map(async (tableName) => {
       try {
         return await getTableSchema(tableName);
       } catch (error) {
-        return `테이블 ${tableName}: 스키마 조회 실패`;
+        return `?뚯씠釉?${tableName}: ?ㅽ궎留?議고쉶 ?ㅽ뙣`;
       }
     })
   );
 
   return schemas.join('\n\n---\n\n');
 }
+

@@ -13,30 +13,48 @@ function estimateTokens(text: string): number {
   return Math.ceil(koreanChars * 2 + otherChars / 4);
 }
 
-// 프롬프트가 너무 길면 데이터 부분을 줄임
-function truncatePromptIfNeeded(prompt: string, maxTokens: number = 150000): string {
+type DataBlockMatch = {
+  fullMatch: string;
+  tagName: string;
+  content: string;
+};
+
+function findDataBlock(prompt: string): DataBlockMatch | null {
+  const regex = /<(DATA|데이터)>([\s\S]*?)<\/\1>/i;
+  const match = prompt.match(regex);
+  if (!match) return null;
+
+  return {
+    fullMatch: match[0],
+    tagName: match[1],
+    content: match[2],
+  };
+}
+
+// 프롬프트가 너무 길면 데이터 블록을 줄여 토큰을 절약
+function truncatePromptIfNeeded(prompt: string, maxTokens: number = 120000): string {
   const estimated = estimateTokens(prompt);
   
   if (estimated <= maxTokens) {
     return prompt;
   }
 
-  // 데이터 테이블 부분 찾기
-  const dataMatch = prompt.match(/<데이터>([\s\S]*?)<\/데이터>/);
-  if (!dataMatch) {
-    // 데이터 태그가 없으면 그냥 텍스트 길이로 자르기
+  const dataBlock = findDataBlock(prompt);
+  if (!dataBlock) {
     const ratio = maxTokens / estimated;
     return prompt.slice(0, Math.floor(prompt.length * ratio * 0.8)) + '\n\n(데이터가 너무 길어 일부만 표시됨)';
   }
 
-  const dataContent = dataMatch[1];
+  const dataContent = dataBlock.content;
   const dataLines = dataContent.trim().split('\n');
   
-  // 헤더와 구분선 유지, 데이터 행 줄이기
+  if (dataLines.length <= 12) {
+    return prompt;
+  }
+
   const headerLines = dataLines.slice(0, 2);
   const dataRows = dataLines.slice(2);
   
-  // 필요한 만큼 행 줄이기
   const targetRatio = maxTokens / estimated;
   const maxRows = Math.max(10, Math.floor(dataRows.length * targetRatio * 0.7));
   const truncatedRows = dataRows.slice(0, maxRows);
@@ -44,7 +62,10 @@ function truncatePromptIfNeeded(prompt: string, maxTokens: number = 150000): str
   const truncatedData = [...headerLines, ...truncatedRows].join('\n') + 
     `\n\n(총 ${dataRows.length}개 행 중 ${maxRows}개만 표시)`;
   
-  return prompt.replace(dataMatch[0], `<데이터>\n${truncatedData}\n</데이터>`);
+  return prompt.replace(
+    dataBlock.fullMatch,
+    `<${dataBlock.tagName}>\n${truncatedData}\n</${dataBlock.tagName}>`
+  );
 }
 
 export async function generateInsight(
