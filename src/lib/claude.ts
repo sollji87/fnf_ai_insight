@@ -146,7 +146,27 @@ Required output sections:
 4) Action Plan (Immediate / 30-90 days)
 5) Data Conflicts or Data Gaps`;
 
+  const enforcedUnitRules = `Non-overridable unit & format rules:
+- Output must be Korean markdown only (no JSON/YAML/object format).
+- All monetary values in narrative and tables must be expressed in "백만원".
+- Prefer *_MIL_KRW directly when available.
+- If only *_KRW(원) is available, convert to 백만원 (= KRW / 1,000,000) and round to one decimal.
+- Do not use 원, KRW, or 억원 as final display units in the report.
+- Keep percentage/ratio units as-is.`;
+
+  const readabilityStyleRules = `Non-overridable readability & executive tone rules:
+- Keep sentences concise and explicit. Prefer one point per sentence.
+- Avoid repeating the same metric/value across sections.
+- For each bullet, write conclusion first, then one supporting number with citation.
+- Use neutral executive language (no hype, no vague adjectives).
+- Keep each section skimmable: 2-5 bullets unless data is insufficient.
+- If evidence is weak, state the limitation briefly and move on.
+- Keep each bullet to max 2 sentences.
+- Keep each bullet line short (target within ~120 Korean characters).
+- If multiple numbers are needed, move detailed values into a markdown table instead of one long sentence.`;
+
   const userInstructions = customPrompt?.trim() ? customPrompt.trim() : defaultInstructions;
+  const finalInstructions = `${userInstructions}\n\n${enforcedUnitRules}\n\n${readabilityStyleRules}`.trim();
 
   const insightsSection = brandInsights.length > 0
     ? `# Brand Insights\n\n${brandInsights
@@ -168,7 +188,7 @@ ${insightsSection}${externalTextSection}
 </DATA>
 
 <ANALYSIS_REQUEST>
-${userInstructions}
+${finalInstructions}
 </ANALYSIS_REQUEST>`;
 
   if (imageSources.length > 0) {
