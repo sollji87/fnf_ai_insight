@@ -282,6 +282,16 @@ ORDER BY total_sales DESC;`);
     setExternalSources((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const uniqueNonEmpty = (values: string[]): string[] => {
+    return Array.from(
+      new Set(
+        values
+          .map((v) => v.trim())
+          .filter(Boolean)
+      )
+    );
+  };
+
   // 저장된 인사이트로 종합 요약 생성
   const generateSummaryFromSaved = async () => {
     if (selectedInsights.length === 0 && externalSources.length === 0) return;
@@ -295,6 +305,11 @@ ORDER BY total_sales DESC;`);
       .map((i) => ({
         brandName: i.brandName || i.title,
         insight: i.insight,
+        sourceId: i.id,
+        sourceTitle: i.title,
+        yearMonth: i.yearMonth,
+        region: i.region,
+        createdAt: i.createdAt,
       }));
 
     try {
@@ -336,31 +351,30 @@ ORDER BY total_sales DESC;`);
     setIsSavingReport(true);
     try {
       // 제목 생성: 선택된 인사이트 또는 브랜드 기반
-      const titleParts = mode === 'saved'
+      const titleCandidates = mode === 'saved'
         ? savedInsights
             .filter((i) => selectedInsights.includes(i.id))
             .map((i) => i.brandName || i.title)
-            .slice(0, 3)
-        : selectedBrands.slice(0, 3);
-      
-      const titleSuffix = (mode === 'saved' ? selectedInsights.length : selectedBrands.length) > 3 
-        ? ` 외 ${(mode === 'saved' ? selectedInsights.length : selectedBrands.length) - 3}개` 
-        : '';
-      
-      const reportTitle = `[종합 요약] ${titleParts.join(', ')}${titleSuffix}`;
+        : selectedBrands;
+      const uniqueTitleCandidates = uniqueNonEmpty(titleCandidates);
+      const titleHead = uniqueTitleCandidates.slice(0, 3);
+      const hiddenCount = Math.max(0, uniqueTitleCandidates.length - titleHead.length);
+      const titleSuffix = hiddenCount > 0 ? ` \uC678 ${hiddenCount}\uAC1C` : '';
+      const finalReportTitle = `[\uC885\uD569 \uC694\uC57D] ${titleHead.length > 0 ? titleHead.join(', ') : '\uC804\uCCB4'}${titleSuffix}`;
 
       const response = await fetch('/api/saved-insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: reportTitle,
-          brandName: '종합 요약 보고서',
+          title: finalReportTitle,
+          brandName: '\uC885\uD569 \uC694\uC57D \uBCF4\uACE0\uC11C',
           insight: summary.insight,
+          analysisRequest: customPrompt.trim() || undefined,
           tokensUsed: summary.tokensUsed,
           model: summary.model,
           region: selectedRegion,
           yearMonth: selectedYearMonth || undefined,
-          createdBy: '시스템',
+          createdBy: '\uC2DC\uC2A4\uD15C',
         }),
       });
 
@@ -559,10 +573,17 @@ ORDER BY total_sales DESC;`);
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          brandInsights: insights.map((bi) => ({
+          brandInsights: insights.map((bi, index) => ({
             brandName: bi.brandName,
             insight: bi.insight,
+            sourceId: `generated-${index + 1}`,
+            sourceTitle: `${bi.brandName} generated insight`,
+            yearMonth: selectedYearMonth,
+            region: selectedRegion,
+            createdAt: new Date().toISOString(),
           })),
+          customPrompt: customPrompt.trim() || undefined,
+          externalSources: externalSources.length > 0 ? externalSources : undefined,
         }),
       });
 

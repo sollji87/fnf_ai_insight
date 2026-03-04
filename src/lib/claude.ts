@@ -6,35 +6,32 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
 });
 
-// 텍스트를 대략적인 토큰 수로 추정 (한글 1글자 = 약 2토큰, 영문/숫자 4글자 = 약 1토큰)
+// Rough token estimator for proactive prompt truncation.
 function estimateTokens(text: string): number {
-  const koreanChars = (text.match(/[가-힣]/g) || []).length;
+  const koreanChars = (text.match(/[\uAC00-\uD7A3]/g) || []).length;
   const otherChars = text.length - koreanChars;
   return Math.ceil(koreanChars * 2 + otherChars / 4);
 }
 
 type DataBlockMatch = {
   fullMatch: string;
-  tagName: string;
   content: string;
 };
 
 function findDataBlock(prompt: string): DataBlockMatch | null {
-  const regex = /<(DATA|데이터)>([\s\S]*?)<\/\1>/i;
-  const match = prompt.match(regex);
+  const match = prompt.match(/<DATA>([\s\S]*?)<\/DATA>/i);
   if (!match) return null;
 
   return {
     fullMatch: match[0],
-    tagName: match[1],
-    content: match[2],
+    content: match[1],
   };
 }
 
-// 프롬프트가 너무 길면 데이터 블록을 줄여 토큰을 절약
+// If prompt grows too large, trim only the DATA block first.
 function truncatePromptIfNeeded(prompt: string, maxTokens: number = 120000): string {
   const estimated = estimateTokens(prompt);
-  
+
   if (estimated <= maxTokens) {
     return prompt;
   }
@@ -42,30 +39,24 @@ function truncatePromptIfNeeded(prompt: string, maxTokens: number = 120000): str
   const dataBlock = findDataBlock(prompt);
   if (!dataBlock) {
     const ratio = maxTokens / estimated;
-    return prompt.slice(0, Math.floor(prompt.length * ratio * 0.8)) + '\n\n(데이터가 너무 길어 일부만 표시됨)';
+    const cut = Math.floor(prompt.length * ratio * 0.8);
+    return `${prompt.slice(0, cut)}\n\n(data truncated due to token limit)`;
   }
 
-  const dataContent = dataBlock.content;
-  const dataLines = dataContent.trim().split('\n');
-  
+  const dataLines = dataBlock.content.trim().split('\n');
   if (dataLines.length <= 12) {
     return prompt;
   }
 
   const headerLines = dataLines.slice(0, 2);
-  const dataRows = dataLines.slice(2);
-  
+  const bodyLines = dataLines.slice(2);
   const targetRatio = maxTokens / estimated;
-  const maxRows = Math.max(10, Math.floor(dataRows.length * targetRatio * 0.7));
-  const truncatedRows = dataRows.slice(0, maxRows);
-  
-  const truncatedData = [...headerLines, ...truncatedRows].join('\n') + 
-    `\n\n(총 ${dataRows.length}개 행 중 ${maxRows}개만 표시)`;
-  
-  return prompt.replace(
-    dataBlock.fullMatch,
-    `<${dataBlock.tagName}>\n${truncatedData}\n</${dataBlock.tagName}>`
-  );
+  const maxBodyLines = Math.max(10, Math.floor(bodyLines.length * targetRatio * 0.7));
+  const truncatedBody = bodyLines.slice(0, maxBodyLines);
+
+  const truncatedData = `${[...headerLines, ...truncatedBody].join('\n')}\n\n(total rows ${bodyLines.length}, shown ${maxBodyLines})`;
+
+  return prompt.replace(dataBlock.fullMatch, `<DATA>\n${truncatedData}\n</DATA>`);
 }
 
 export async function generateInsight(
@@ -74,8 +65,6 @@ export async function generateInsight(
   model: string = 'claude-sonnet-4-5-20250929'
 ): Promise<InsightResponse> {
   const startTime = Date.now();
-
-  // 프롬프트 길이 체크 및 필요시 자르기
   const truncatedUserPrompt = truncatePromptIfNeeded(userPrompt);
 
   const response = await anthropic.messages.create({
@@ -102,88 +91,110 @@ export async function generateInsight(
   };
 }
 
-// 외부 소스 타입 정의
 interface ExternalSource {
   name: string;
   type: 'excel' | 'image' | 'text' | 'pdf';
   content: string;
 }
 
+interface BrandSummarySourceItem {
+  brandName: string;
+  insight: string;
+  sourceId?: string;
+  sourceTitle?: string;
+  yearMonth?: string;
+  region?: string;
+  createdAt?: string;
+}
+
+function buildSummarySourceBlock(item: BrandSummarySourceItem, index: number): string {
+  const sourceId = item.sourceId || `source-${index + 1}`;
+  const meta = [
+    `- SOURCE_ID: ${sourceId}`,
+    item.sourceTitle ? `- SOURCE_TITLE: ${item.sourceTitle}` : '',
+    item.yearMonth ? `- YEAR_MONTH: ${item.yearMonth}` : '',
+    item.region ? `- REGION: ${item.region}` : '',
+    item.createdAt ? `- CREATED_AT: ${item.createdAt}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return `## ${item.brandName}\n${meta}\n${item.insight}`;
+}
+
 export async function generateBrandSummary(
-  brandInsights: { brandName: string; insight: string }[],
+  brandInsights: BrandSummarySourceItem[],
   customPrompt?: string,
   externalSources?: ExternalSource[]
 ): Promise<InsightResponse> {
   const startTime = Date.now();
   const model = 'claude-sonnet-4-5-20250929';
 
-  const defaultInstructions = `위 브랜드별 인사이트를 바탕으로 다음 내용을 포함하여 종합 분석해주세요:
-1. 전체 브랜드 성과 요약
-2. 브랜드간 비교 분석 (강점/약점)
-3. 주목해야 할 이상징후
-4. 전사 차원의 전략적 제언`;
+  const defaultInstructions = `Write a Korean markdown executive summary using only the provided source insights.
 
-  const userInstructions = customPrompt || defaultInstructions;
+Hard rules:
+- Do not invent numbers, percentages, rankings, probabilities, or confidence values.
+- Every numeric claim must include citation tags in the form [src:SOURCE_ID].
+- If sources conflict, create a "Data Conflicts" subsection and show both values with citations.
+- If evidence is insufficient, explicitly write "데이터 부족" and avoid speculation.
+- Keep output concise: target 900-1500 Korean characters (excluding tables).
 
-  // 브랜드 인사이트 섹션
+Required output sections:
+1) Executive Summary (3-5 bullets)
+2) Cross-Brand Comparison (strengths / weaknesses)
+3) Risks / Anomalies (Top 3)
+4) Action Plan (Immediate / 30-90 days)
+5) Data Conflicts or Data Gaps`;
+
+  const userInstructions = customPrompt?.trim() ? customPrompt.trim() : defaultInstructions;
+
   const insightsSection = brandInsights.length > 0
-    ? `# 브랜드별 인사이트
-
-${brandInsights
-  .map(
-    (bi) => `## ${bi.brandName}
-${bi.insight}
-`
-  )
-  .join('\n---\n\n')}`
+    ? `# Brand Insights\n\n${brandInsights
+        .map((item, index) => buildSummarySourceBlock(item, index))
+        .join('\n\n---\n\n')}`
     : '';
 
-  // 외부 소스 섹션 (이미지 제외)
-  const textSources = externalSources?.filter(s => s.type !== 'image') || [];
-  const imageSources = externalSources?.filter(s => s.type === 'image') || [];
+  const textSources = externalSources?.filter((s) => s.type !== 'image') || [];
+  const imageSources = externalSources?.filter((s) => s.type === 'image') || [];
 
   const externalTextSection = textSources.length > 0
-    ? `\n\n# 외부 참고 자료
-
-${textSources.map(s => s.content).join('\n\n---\n\n')}`
+    ? `\n\n# External Sources\n\n${textSources.map((s) => s.content).join('\n\n---\n\n')}`
     : '';
 
-  // 기본 텍스트 프롬프트 구성
-  const basePrompt = `다음은 분석할 자료입니다. 이를 종합하여 전체 요약 및 분석을 마크다운 형식으로 작성해주세요.
+  const basePrompt = `다음 자료를 종합해 한국어 마크다운 요약 보고서를 작성해주세요.
 
+<DATA>
 ${insightsSection}${externalTextSection}
+</DATA>
 
-<분석 지침>
+<ANALYSIS_REQUEST>
 ${userInstructions}
-</분석 지침>`;
+</ANALYSIS_REQUEST>`;
 
-  // 이미지가 있는 경우 멀티모달 API 사용
   if (imageSources.length > 0) {
     const contentBlocks: Anthropic.MessageCreateParams['messages'][0]['content'] = [];
 
-    // 이미지 추가
     for (const img of imageSources) {
-      // data:image/png;base64,... 형식에서 추출
       const matches = img.content.match(/^data:([^;]+);base64,(.+)$/);
-      if (matches) {
-        const mediaType = matches[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
-        const base64Data = matches[2];
-        contentBlocks.push({
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: mediaType,
-            data: base64Data,
-          },
-        });
-        contentBlocks.push({
-          type: 'text',
-          text: `[위 이미지: ${img.name}]`,
-        });
-      }
+      if (!matches) continue;
+
+      const mediaType = matches[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+      const base64Data = matches[2];
+
+      contentBlocks.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: mediaType,
+          data: base64Data,
+        },
+      });
+      contentBlocks.push({
+        type: 'text',
+        text: `[image: ${img.name}]`,
+      });
     }
 
-    // 텍스트 프롬프트 추가
     contentBlocks.push({
       type: 'text',
       text: basePrompt,
@@ -213,6 +224,5 @@ ${userInstructions}
     };
   }
 
-  // 이미지가 없는 경우 기존 방식
-  return generateInsight(SYSTEM_PROMPT, basePrompt);
+  return generateInsight(SYSTEM_PROMPT, basePrompt, model);
 }
