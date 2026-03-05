@@ -9,11 +9,23 @@ const anthropic = new Anthropic({
 function getMaxOutputTokens(): number {
   const raw = process.env.CLAUDE_MAX_OUTPUT_TOKENS;
   const parsed = raw ? Number.parseInt(raw, 10) : NaN;
-  if (Number.isFinite(parsed) && parsed >= 1024 && parsed <= 64000) {
+  if (Number.isFinite(parsed) && parsed >= 1024) {
     return parsed;
   }
   return 64000;
 }
+
+function getMaxContinuationTurns(): number {
+  const raw = process.env.CLAUDE_MAX_CONTINUATION_TURNS;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 20) {
+    return parsed;
+  }
+  return 6;
+}
+
+const CONTINUATION_PROMPT =
+  'Continue exactly where you left off. Do not restart, summarize, or repeat earlier sections.';
 
 function extractTextContent(content: Anthropic.Messages.Message['content']): string {
   return content
@@ -25,12 +37,61 @@ function extractTextContent(content: Anthropic.Messages.Message['content']): str
 
 function warnIfTruncated(
   response: Anthropic.Messages.Message,
-  context: { model: string; maxOutputTokens: number }
+  context: { model: string; maxOutputTokens: number; pass: number }
 ): void {
   if (response.stop_reason !== 'max_tokens') return;
   console.warn(
-    `[claude] response truncated (stop_reason=max_tokens): model=${context.model}, max_tokens=${context.maxOutputTokens}, input_tokens=${response.usage.input_tokens}, output_tokens=${response.usage.output_tokens}`
+    `[claude] response truncated (stop_reason=max_tokens): model=${context.model}, pass=${context.pass}, max_tokens=${context.maxOutputTokens}, input_tokens=${response.usage.input_tokens}, output_tokens=${response.usage.output_tokens}`
   );
+}
+
+interface ContinuationResult {
+  text: string;
+  tokensUsed: number;
+}
+
+async function generateWithContinuation(
+  model: string,
+  maxOutputTokens: number,
+  system: string,
+  seedMessages: Anthropic.MessageParam[]
+): Promise<ContinuationResult> {
+  const maxTurns = getMaxContinuationTurns();
+  const messages = [...seedMessages];
+  let fullText = '';
+  let totalTokensUsed = 0;
+
+  for (let pass = 1; pass <= maxTurns; pass += 1) {
+    const response = await anthropic.messages.create({
+      model,
+      max_tokens: maxOutputTokens,
+      system,
+      messages,
+    });
+
+    totalTokensUsed += response.usage.input_tokens + response.usage.output_tokens;
+    const chunk = extractTextContent(response.content);
+    if (chunk) {
+      fullText = fullText ? `${fullText}\n${chunk}` : chunk;
+    }
+
+    if (response.stop_reason !== 'max_tokens') {
+      return { text: fullText, tokensUsed: totalTokensUsed };
+    }
+
+    warnIfTruncated(response, { model, maxOutputTokens, pass });
+    if (pass === maxTurns) {
+      console.warn(
+        `[claude] continuation limit reached: model=${model}, max_turns=${maxTurns}, max_tokens=${maxOutputTokens}`
+      );
+      return { text: fullText, tokensUsed: totalTokensUsed };
+    }
+
+    messages.push({ role: 'assistant', content: chunk || '...' });
+    messages.push({ role: 'user', content: CONTINUATION_PROMPT });
+  }
+
+  return { text: fullText, tokensUsed: totalTokensUsed };
 }
 
 // Rough token estimator for proactive prompt truncation.
@@ -89,32 +150,22 @@ function truncatePromptIfNeeded(prompt: string, maxTokens: number = 120000): str
 export async function generateInsight(
   systemPrompt: string,
   userPrompt: string,
-  model: string = 'claude-sonnet-4-5-20250929'
+  model: string = 'claude-sonnet-4-6'
 ): Promise<InsightResponse> {
   const startTime = Date.now();
   const maxOutputTokens = getMaxOutputTokens();
   const truncatedUserPrompt = truncatePromptIfNeeded(userPrompt);
-
-  const response = await anthropic.messages.create({
-    model,
-    max_tokens: maxOutputTokens,
-    system: systemPrompt || SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: truncatedUserPrompt,
-      },
-    ],
-  });
-
-  warnIfTruncated(response, { model, maxOutputTokens });
-
+  const completion = await generateWithContinuation(model, maxOutputTokens, systemPrompt || SYSTEM_PROMPT, [
+    {
+      role: 'user',
+      content: truncatedUserPrompt,
+    },
+  ]);
   const responseTime = Date.now() - startTime;
-  const insight = extractTextContent(response.content);
 
   return {
-    insight,
-    tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+    insight: completion.text,
+    tokensUsed: completion.tokensUsed,
     responseTime,
     model,
   };
@@ -158,7 +209,7 @@ export async function generateBrandSummary(
 ): Promise<InsightResponse> {
   const startTime = Date.now();
   const maxOutputTokens = getMaxOutputTokens();
-  const model = 'claude-sonnet-4-5-20250929';
+  const model = 'claude-sonnet-4-6';
 
   const defaultInstructions = `Write a Korean markdown executive summary using only the provided source insights.
 
@@ -250,26 +301,17 @@ ${finalInstructions}
       text: basePrompt,
     });
 
-    const response = await anthropic.messages.create({
-      model,
-      max_tokens: maxOutputTokens,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: contentBlocks,
-        },
-      ],
-    });
-
-    warnIfTruncated(response, { model, maxOutputTokens });
-
+    const completion = await generateWithContinuation(model, maxOutputTokens, SYSTEM_PROMPT, [
+      {
+        role: 'user',
+        content: contentBlocks,
+      },
+    ]);
     const responseTime = Date.now() - startTime;
-    const insight = extractTextContent(response.content);
 
     return {
-      insight,
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      insight: completion.text,
+      tokensUsed: completion.tokensUsed,
       responseTime,
       model,
     };

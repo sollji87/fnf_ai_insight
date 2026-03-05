@@ -6,6 +6,15 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+function getQueryHelperMaxOutputTokens(): number {
+  const raw = process.env.CLAUDE_QUERY_HELPER_MAX_OUTPUT_TOKENS || process.env.CLAUDE_MAX_OUTPUT_TOKENS;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  if (Number.isFinite(parsed) && parsed >= 512) {
+    return parsed;
+  }
+  return 64000;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { currentQuery, userRequest, tableImage, tables } = await request.json();
@@ -92,8 +101,8 @@ SQL 쿼리만 반환하세요:`;
     });
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 2000,
+      model: 'claude-sonnet-4-6',
+      max_tokens: getQueryHelperMaxOutputTokens(),
       messages,
     });
 
