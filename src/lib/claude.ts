@@ -4,6 +4,7 @@ import { SYSTEM_PROMPT } from './prompts';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
+  timeout: 60 * 60 * 1000,
 });
 
 function getMaxOutputTokens(): number {
