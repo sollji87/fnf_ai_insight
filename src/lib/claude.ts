@@ -6,6 +6,33 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
 });
 
+function getMaxOutputTokens(): number {
+  const raw = process.env.CLAUDE_MAX_OUTPUT_TOKENS;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  if (Number.isFinite(parsed) && parsed >= 1024 && parsed <= 64000) {
+    return parsed;
+  }
+  return 64000;
+}
+
+function extractTextContent(content: Anthropic.Messages.Message['content']): string {
+  return content
+    .filter((block) => block.type === 'text')
+    .map((block) => ('text' in block ? block.text : ''))
+    .join('\n')
+    .trim();
+}
+
+function warnIfTruncated(
+  response: Anthropic.Messages.Message,
+  context: { model: string; maxOutputTokens: number }
+): void {
+  if (response.stop_reason !== 'max_tokens') return;
+  console.warn(
+    `[claude] response truncated (stop_reason=max_tokens): model=${context.model}, max_tokens=${context.maxOutputTokens}, input_tokens=${response.usage.input_tokens}, output_tokens=${response.usage.output_tokens}`
+  );
+}
+
 // Rough token estimator for proactive prompt truncation.
 function estimateTokens(text: string): number {
   const koreanChars = (text.match(/[\uAC00-\uD7A3]/g) || []).length;
@@ -65,11 +92,12 @@ export async function generateInsight(
   model: string = 'claude-sonnet-4-5-20250929'
 ): Promise<InsightResponse> {
   const startTime = Date.now();
+  const maxOutputTokens = getMaxOutputTokens();
   const truncatedUserPrompt = truncatePromptIfNeeded(userPrompt);
 
   const response = await anthropic.messages.create({
     model,
-    max_tokens: 8192,
+    max_tokens: maxOutputTokens,
     system: systemPrompt || SYSTEM_PROMPT,
     messages: [
       {
@@ -79,9 +107,10 @@ export async function generateInsight(
     ],
   });
 
+  warnIfTruncated(response, { model, maxOutputTokens });
+
   const responseTime = Date.now() - startTime;
-  const textContent = response.content.find((block) => block.type === 'text');
-  const insight = textContent && 'text' in textContent ? textContent.text : '';
+  const insight = extractTextContent(response.content);
 
   return {
     insight,
@@ -128,6 +157,7 @@ export async function generateBrandSummary(
   externalSources?: ExternalSource[]
 ): Promise<InsightResponse> {
   const startTime = Date.now();
+  const maxOutputTokens = getMaxOutputTokens();
   const model = 'claude-sonnet-4-5-20250929';
 
   const defaultInstructions = `Write a Korean markdown executive summary using only the provided source insights.
@@ -222,7 +252,7 @@ ${finalInstructions}
 
     const response = await anthropic.messages.create({
       model,
-      max_tokens: 8192,
+      max_tokens: maxOutputTokens,
       system: SYSTEM_PROMPT,
       messages: [
         {
@@ -232,9 +262,10 @@ ${finalInstructions}
       ],
     });
 
+    warnIfTruncated(response, { model, maxOutputTokens });
+
     const responseTime = Date.now() - startTime;
-    const textContent = response.content.find((block) => block.type === 'text');
-    const insight = textContent && 'text' in textContent ? textContent.text : '';
+    const insight = extractTextContent(response.content);
 
     return {
       insight,
