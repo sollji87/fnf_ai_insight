@@ -122,6 +122,8 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
   const [selectedCategory, setSelectedCategory] = useState<SavedQuery['category']>('custom');
   const [selectedSaveRegion, setSelectedSaveRegion] = useState<RegionId>(region || 'domestic');
   const [selectedSaveBrand, setSelectedSaveBrand] = useState<BrandCode>('M');
+  const [overwriteTargetQueryId, setOverwriteTargetQueryId] = useState('');
+  const [saveDialogError, setSaveDialogError] = useState<string | null>(null);
   const [selectedQueryId, setSelectedQueryId] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -237,10 +239,34 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
     }
   };
 
-  const handleSaveQuery = async () => {
+  const handleOpenSaveDialog = () => {
+    setSaveDialogError(null);
+
+    const selectedSaved = savedQueries.find((q) => q.id === selectedQueryId);
+    if (selectedSaved) {
+      setOverwriteTargetQueryId(selectedSaved.id);
+      setNewQueryName(selectedSaved.name);
+      setNewQueryCreator(selectedSaved.createdBy || '');
+      setSelectedCategory(selectedSaved.category);
+      setSelectedSaveRegion((selectedSaved.region || region || 'domestic') as RegionId);
+      setSelectedSaveBrand((selectedSaved.brand || 'M') as BrandCode);
+    } else {
+      setOverwriteTargetQueryId('');
+      setNewQueryName('');
+      setNewQueryCreator('');
+      setSelectedCategory('custom');
+      setSelectedSaveRegion(region || 'domestic');
+      setSelectedSaveBrand('M');
+    }
+
+    setShowSaveDialog(true);
+  };
+
+  const handleCreateQuery = async () => {
     if (!newQueryName.trim()) return;
 
     setIsSaving(true);
+    setSaveDialogError(null);
     try {
       const response = await fetch('/api/saved-queries', {
         method: 'POST',
@@ -263,13 +289,51 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
         setNewQueryCreator('');
         setSelectedSaveRegion(region || 'domestic');
         setSelectedSaveBrand('M');
+        setOverwriteTargetQueryId('');
         setShowSaveDialog(false);
         setSelectedQueryId(data.query.id);
       } else {
-        setError(data.error);
+        setSaveDialogError(data.error || '쿼리 저장에 실패했습니다.');
       }
     } catch (err) {
-      setError('쿼리 저장에 실패했습니다.');
+      setSaveDialogError('쿼리 저장에 실패했습니다.');
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleOverwriteQuery = async () => {
+    if (!overwriteTargetQueryId) return;
+
+    setIsSaving(true);
+    setSaveDialogError(null);
+    try {
+      const response = await fetch('/api/saved-queries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: overwriteTargetQueryId,
+          name: newQueryName.trim() || undefined,
+          query,
+          category: selectedCategory,
+          region: selectedSaveRegion,
+          brand: selectedSaveBrand,
+          createdBy: newQueryCreator.trim() || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await fetchSavedQueries();
+        setShowSaveDialog(false);
+        setSelectedQueryId(overwriteTargetQueryId);
+      } else {
+        setSaveDialogError(data.error || '쿼리 덮어쓰기에 실패했습니다.');
+      }
+    } catch (err) {
+      setSaveDialogError('쿼리 덮어쓰기에 실패했습니다.');
       console.error(err);
     } finally {
       setIsSaving(false);
@@ -362,6 +426,18 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
         onAnalysisRequestLoad(buildRobustFallbackAnalysisRequest(saved));
       }
     }
+  };
+
+  const handleOverwriteTargetChange = (id: string) => {
+    setOverwriteTargetQueryId(id);
+    const target = savedQueries.find((q) => q.id === id);
+    if (!target) return;
+
+    setNewQueryName(target.name);
+    setNewQueryCreator(target.createdBy || '');
+    setSelectedCategory(target.category);
+    setSelectedSaveRegion((target.region || region || 'domestic') as RegionId);
+    setSelectedSaveBrand((target.brand || 'M') as BrandCode);
   };
 
   const executeQuery = async () => {
@@ -678,7 +754,7 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setShowSaveDialog(true)}
+            onClick={handleOpenSaveDialog}
             className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 h-7 px-1.5 text-[11px]"
           >
             <Save className="w-3 h-3" />
@@ -870,6 +946,33 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
             </div>
             <div className="space-y-4">
               <div>
+                <label className="text-sm text-gray-600 mb-1.5 block">기존 쿼리 덮어쓰기 대상</label>
+                <Select value={overwriteTargetQueryId} onValueChange={handleOverwriteTargetChange}>
+                  <SelectTrigger className="bg-white border-gray-200 text-gray-900">
+                    <SelectValue placeholder="덮어쓸 쿼리 선택 (선택사항)" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-gray-200 max-h-[260px]">
+                    {savedQueries.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-gray-400 text-center">
+                        저장된 쿼리가 없습니다
+                      </div>
+                    ) : (
+                      savedQueries.map((q) => (
+                        <SelectItem key={q.id} value={q.id} className="text-gray-700">
+                          <span className="flex items-center gap-2">
+                            <span className="text-[10px] text-gray-400 uppercase">{q.region}</span>
+                            <span>{q.name}</span>
+                          </span>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  선택 후 아래 `기존 쿼리 덮어쓰기` 버튼을 누르면 현재 편집 쿼리로 대체됩니다.
+                </p>
+              </div>
+              <div>
                 <label className="text-sm text-gray-600 mb-1.5 block">쿼리 이름</label>
                 <Input
                   value={newQueryName}
@@ -937,23 +1040,50 @@ export function SqlEditor({ onQueryResult, isLoading, setIsLoading, region = 'do
                   </SelectContent>
                 </Select>
               </div>
-              <Button
-                onClick={handleSaveQuery}
-                disabled={!newQueryName.trim() || isSaving}
-                className="w-full bg-gray-900 hover:bg-gray-800 text-white"
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    저장 중...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    저장하기 (모든 사용자 공유)
-                  </>
-                )}
-              </Button>
+
+              {saveDialogError && (
+                <div className="px-3 py-2 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm">
+                  {saveDialogError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  onClick={handleOverwriteQuery}
+                  disabled={!overwriteTargetQueryId || isSaving}
+                  variant="outline"
+                  className="border-gray-200 text-gray-700 hover:bg-gray-50"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      저장 중...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      기존 쿼리 덮어쓰기
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={handleCreateQuery}
+                  disabled={!newQueryName.trim() || isSaving}
+                  className="bg-gray-900 hover:bg-gray-800 text-white"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      저장 중...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      새로 저장
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

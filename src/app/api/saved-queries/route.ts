@@ -29,7 +29,7 @@ const getRedis = () => {
   return new Redis({ url, token });
 };
 
-type Region = 'domestic' | 'china';
+type Region = 'domestic' | 'china' | 'hmt' | 'usa';
 type BrandCode = 'M' | 'I' | 'X' | 'V' | 'ST';
 
 interface SavedQuery {
@@ -346,6 +346,67 @@ export async function PUT(request: NextRequest) {
     console.error('Redis Error:', error);
     return NextResponse.json(
       { error: '일괄 작업 중 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
+// 저장된 쿼리 단건 업데이트 (덮어쓰기)
+export async function PATCH(request: NextRequest) {
+  try {
+    const redis = getRedis();
+    if (!redis) {
+      return NextResponse.json(
+        { error: 'Redis가 설정되지 않았습니다.' },
+        { status: 500 }
+      );
+    }
+
+    const body = await request.json();
+    const { id, name, query, analysisRequest, category, createdBy, region, brand } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { error: '업데이트할 쿼리 ID가 필요합니다.' },
+        { status: 400 }
+      );
+    }
+
+    const queries = await redis.get<SavedQuery[]>(QUERIES_KEY) || [];
+    const queryIndex = queries.findIndex((q) => q.id === id);
+
+    if (queryIndex === -1) {
+      return NextResponse.json(
+        { error: '해당 쿼리를 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+
+    const updates: Partial<SavedQuery> = {};
+    if (name !== undefined) updates.name = name;
+    if (query !== undefined) updates.query = query;
+    if (analysisRequest !== undefined) updates.analysisRequest = analysisRequest;
+    if (category !== undefined) updates.category = category;
+    if (createdBy !== undefined) updates.createdBy = createdBy;
+    if (region !== undefined) updates.region = region;
+    if (brand !== undefined) updates.brand = brand;
+
+    queries[queryIndex] = {
+      ...queries[queryIndex],
+      ...updates,
+    };
+
+    await redis.set(QUERIES_KEY, queries);
+
+    return NextResponse.json({
+      success: true,
+      query: queries[queryIndex],
+      updatedFields: Object.keys(updates),
+    });
+  } catch (error) {
+    console.error('Redis Error:', error);
+    return NextResponse.json(
+      { error: '쿼리 업데이트 중 오류가 발생했습니다.' },
       { status: 500 }
     );
   }
