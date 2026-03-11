@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { FileText, Copy, Download, Check, Clock, Coins, Cpu, Save, X, Pencil } from 'lucide-react';
-import type { InsightResponse, RegionId } from '@/types';
+import type { InsightResponse, RegionId, SavedInsight } from '@/types';
 
 interface InsightViewerProps {
   insightResponse: InsightResponse | null;
@@ -16,25 +16,53 @@ interface InsightViewerProps {
   region?: RegionId; // 현재 선택된 국가
 }
 
+type SaveMode = 'create' | 'overwrite';
+
 export function InsightViewer({ insightResponse, currentQuery, brandName, analysisRequest, region = 'domestic' }: InsightViewerProps) {
   const [copied, setCopied] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveMode, setSaveMode] = useState<SaveMode>('create');
   const [saveTitle, setSaveTitle] = useState('');
   const [saveBrandName, setSaveBrandName] = useState(brandName || '');
   const [createdBy, setCreatedBy] = useState('');
   const [saveYearMonth, setSaveYearMonth] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [savedInsights, setSavedInsights] = useState<SavedInsight[]>([]);
+  const [selectedInsightId, setSelectedInsightId] = useState('');
+  const [isLoadingSavedInsights, setIsLoadingSavedInsights] = useState(false);
 
   // 편집 관련 상태
   const [isEditing, setIsEditing] = useState(false);
   const [editedInsight, setEditedInsight] = useState('');
   const [currentInsight, setCurrentInsight] = useState(insightResponse?.insight || '');
 
-  // insightResponse가 변경되면 currentInsight 업데이트
-  if (insightResponse?.insight && insightResponse.insight !== currentInsight && !isEditing) {
-    setCurrentInsight(insightResponse.insight);
-  }
+  // insightResponse가 바뀔 때만 동기화 (수정 후 내용이 원문으로 되돌아가는 문제 방지)
+  useEffect(() => {
+    setCurrentInsight(insightResponse?.insight || '');
+    setIsEditing(false);
+    setEditedInsight('');
+  }, [insightResponse?.insight]);
+
+  useEffect(() => {
+    if (saveMode !== 'overwrite') return;
+
+    if (!selectedInsightId && savedInsights.length > 0) {
+      setSelectedInsightId(savedInsights[0].id);
+    }
+  }, [saveMode, selectedInsightId, savedInsights]);
+
+  useEffect(() => {
+    if (saveMode !== 'overwrite' || !selectedInsightId) return;
+
+    const target = savedInsights.find((item) => item.id === selectedInsightId);
+    if (!target) return;
+
+    setSaveTitle(target.title || '');
+    setSaveBrandName(target.brandName || '');
+    setSaveYearMonth(target.yearMonth || '');
+  }, [saveMode, selectedInsightId, savedInsights]);
 
   // 편집 시작
   const startEditing = () => {
@@ -76,53 +104,125 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
     URL.revokeObjectURL(url);
   };
 
-  const handleSave = async () => {
-    if (!currentInsight || !saveTitle.trim()) return;
+  const getDefaultTitle = () => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    return brandName?.trim()
+      ? `${brandName.trim()} AI 인사이트 ${yyyy}-${mm}-${dd}`
+      : `AI 인사이트 ${yyyy}-${mm}-${dd}`;
+  };
 
-    setIsSaving(true);
+  const fetchSavedInsights = async () => {
+    setIsLoadingSavedInsights(true);
     try {
-      const response = await fetch('/api/saved-insights', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: saveTitle.trim(),
-          brandName: saveBrandName.trim() || undefined,
-          insight: currentInsight,
-          query: currentQuery,
-          analysisRequest: analysisRequest,
-          tokensUsed: insightResponse?.tokensUsed,
-          model: insightResponse?.model,
-          region: region,
-          yearMonth: saveYearMonth.trim() || undefined,
-          createdBy: createdBy.trim() || '익명',
-        }),
-      });
-
-      if (response.ok) {
-        setSaveSuccess(true);
-        setTimeout(() => {
-          setShowSaveDialog(false);
-          setSaveSuccess(false);
-          setSaveTitle('');
-          setSaveBrandName('');
-          setSaveYearMonth('');
-          setCreatedBy('');
-        }, 1500);
+      const response = await fetch('/api/saved-insights');
+      const data = await response.json();
+      if (data.success) {
+        setSavedInsights(data.insights || []);
+      } else {
+        setSaveError(data.error || '저장된 인사이트 목록을 불러오지 못했습니다.');
       }
     } catch (error) {
+      console.error('Fetch saved insights error:', error);
+      setSaveError('저장된 인사이트 목록을 불러오지 못했습니다.');
+    } finally {
+      setIsLoadingSavedInsights(false);
+    }
+  };
+
+  const getResponseError = async (response: Response) => {
+    try {
+      const data = await response.json();
+      return data?.error || '저장에 실패했습니다.';
+    } catch {
+      return '저장에 실패했습니다.';
+    }
+  };
+
+  const handleSave = async () => {
+    if (!currentInsight) return;
+    if (saveMode === 'create' && !saveTitle.trim()) {
+      setSaveError('새로 저장 시 제목은 필수입니다.');
+      return;
+    }
+    if (saveMode === 'overwrite' && !selectedInsightId) {
+      setSaveError('덮어쓸 인사이트를 선택해주세요.');
+      return;
+    }
+
+    setSaveError('');
+    setIsSaving(true);
+    try {
+      const isCreate = saveMode === 'create';
+      const response = await fetch('/api/saved-insights', {
+        method: isCreate ? 'POST' : 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          isCreate
+            ? {
+                title: saveTitle.trim(),
+                brandName: saveBrandName.trim() || undefined,
+                insight: currentInsight,
+                query: currentQuery,
+                analysisRequest: analysisRequest,
+                tokensUsed: insightResponse?.tokensUsed,
+                model: insightResponse?.model,
+                region: region,
+                yearMonth: saveYearMonth.trim() || undefined,
+                createdBy: createdBy.trim() || '익명',
+              }
+            : {
+                id: selectedInsightId,
+                insight: currentInsight,
+                title: saveTitle.trim() || undefined,
+                brandName: saveBrandName.trim() || undefined,
+                yearMonth: saveYearMonth.trim() || undefined,
+                query: currentQuery || undefined,
+                analysisRequest: analysisRequest || undefined,
+              }
+        ),
+      });
+
+      if (!response.ok) {
+        const errorMessage = await getResponseError(response);
+        setSaveError(errorMessage);
+        return;
+      }
+
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setShowSaveDialog(false);
+        setSaveSuccess(false);
+        setSaveError('');
+        setSaveMode('create');
+        setSaveTitle('');
+        setSaveBrandName('');
+        setSaveYearMonth('');
+        setCreatedBy('');
+        setSelectedInsightId('');
+      }, 1200);
+    } catch (error) {
       console.error('Save error:', error);
+      setSaveError('저장 중 네트워크 오류가 발생했습니다.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const openSaveDialog = () => {
+    setSaveMode('create');
+    setSaveError('');
+    setSaveSuccess(false);
     setSaveBrandName(brandName || '');
-    setSaveTitle(brandName ? `${brandName} 분석 인사이트` : '');
+    setSaveTitle(getDefaultTitle());
     // 현재 연월 기본값 (YYYYMM)
     const now = new Date();
     setSaveYearMonth(`${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`);
+    setSelectedInsightId('');
     setShowSaveDialog(true);
+    void fetchSavedInsights();
   };
 
   if (!insightResponse) {
@@ -299,7 +399,58 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                      제목 <span className="text-red-500">*</span>
+                      저장 방식
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        type="button"
+                        variant={saveMode === 'create' ? 'default' : 'outline'}
+                        onClick={() => setSaveMode('create')}
+                        className={saveMode === 'create' ? 'bg-gray-900 hover:bg-gray-800 text-white' : ''}
+                      >
+                        새로 저장
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={saveMode === 'overwrite' ? 'default' : 'outline'}
+                        onClick={() => setSaveMode('overwrite')}
+                        className={saveMode === 'overwrite' ? 'bg-gray-900 hover:bg-gray-800 text-white' : ''}
+                      >
+                        기존 덮어쓰기
+                      </Button>
+                    </div>
+                  </div>
+
+                  {saveMode === 'overwrite' && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        덮어쓸 인사이트 <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={selectedInsightId}
+                        onChange={(e) => setSelectedInsightId(e.target.value)}
+                        className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                        disabled={isLoadingSavedInsights || savedInsights.length === 0}
+                      >
+                        <option value="">
+                          {isLoadingSavedInsights
+                            ? '불러오는 중...'
+                            : savedInsights.length === 0
+                              ? '저장된 인사이트가 없습니다'
+                              : '선택하세요'}
+                        </option>
+                        {savedInsights.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.title} ({new Date(item.createdAt).toLocaleDateString('ko-KR')})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      제목 {saveMode === 'create' && <span className="text-red-500">*</span>}
                     </label>
                     <input
                       type="text"
@@ -350,10 +501,15 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
                       value={createdBy}
                       onChange={(e) => setCreatedBy(e.target.value)}
                       placeholder="예: 홍길동"
+                      disabled={saveMode === 'overwrite'}
                       className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                     />
                   </div>
                 </div>
+
+                {saveError && (
+                  <p className="text-xs text-red-600 mt-3">{saveError}</p>
+                )}
 
                 <div className="flex gap-2 mt-5">
                   <Button
@@ -365,10 +521,15 @@ export function InsightViewer({ insightResponse, currentQuery, brandName, analys
                   </Button>
                   <Button
                     onClick={handleSave}
-                    disabled={!saveTitle.trim() || isSaving}
+                    disabled={
+                      isSaving ||
+                      !currentInsight ||
+                      (saveMode === 'create' && !saveTitle.trim()) ||
+                      (saveMode === 'overwrite' && !selectedInsightId)
+                    }
                     className="flex-1 bg-gray-900 hover:bg-gray-800 text-white"
                   >
-                    {isSaving ? '저장 중...' : '저장'}
+                    {isSaving ? '저장 중...' : saveMode === 'create' ? '새로 저장' : '덮어쓰기 저장'}
                   </Button>
                 </div>
               </>
