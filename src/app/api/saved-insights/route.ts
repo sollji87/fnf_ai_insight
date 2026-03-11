@@ -5,6 +5,7 @@ import type { RegionId } from '@/types';
 const INSIGHTS_KEY = 'fnf-shared-insights';
 const TRASH_KEY = 'fnf-shared-insights-trash';
 const TRASH_RETENTION_DAYS = 30;
+const INSIGHTS_MAX_ITEMS = Number(process.env.INSIGHTS_MAX_ITEMS || 500);
 
 // Upstash Redis 연결
 const getRedis = () => {
@@ -157,9 +158,9 @@ export async function POST(request: NextRequest) {
     // 새 인사이트 추가 (최신순)
     insights = [newInsight, ...insights];
     
-    // 최대 50개로 제한
-    if (insights.length > 50) {
-      insights = insights.slice(0, 50);
+    // 최근 항목 기준 상한 유지 (기본 500)
+    if (insights.length > INSIGHTS_MAX_ITEMS) {
+      insights = insights.slice(0, INSIGHTS_MAX_ITEMS);
     }
 
     await redis.set(INSIGHTS_KEY, insights);
